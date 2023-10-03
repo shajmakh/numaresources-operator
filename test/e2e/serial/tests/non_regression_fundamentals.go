@@ -67,9 +67,46 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 		var testPod *corev1.Pod
 
 		BeforeEach(func() {
-			if len(nrtList.Items) > 0 {
-				e2efixture.Skip(fxt, "this test require empty NRT data")
+			By("Disable RTE functionality hence NRT updated data publishing")
+			err := fxt.Client.Get(context.TODO(), nroKey, nropObjInitial)
+			Expect(err).ToNot(HaveOccurred(), "cannot get %q from the cluster", nroKey.String())
+
+			updatedNROPObj := nropObjInitial.DeepCopy()
+			infoRefreshPauseMode := nropv1.InfoRefreshPauseEnabled
+			updatedNROPObj.Spec.NodeGroups[0].Config = &nropv1.NodeGroupConfig{
+				InfoRefreshPause: &infoRefreshPauseMode,
 			}
+
+			By("wait long enough to verify NROP object is updated")
+			err = fxt.Client.Update(context.TODO(), updatedNROPObj)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() nropv1.InfoRefreshPauseMode {
+				nropObjCurrent := &nropv1.NUMAResourcesOperator{}
+				err = fxt.Client.Get(context.TODO(), nroKey, nropObjCurrent)
+				Expect(err).ToNot(HaveOccurred(), "post NROP updated: cannot get %q from the cluster", nroKey.String())
+
+				return *nropObjCurrent.Status.MachineConfigPools[0].Config.InfoRefreshPause
+			}).WithTimeout(time.Minute).WithPolling(9*time.Second).Should(Equal(infoRefreshPauseMode), "failed to update the NROP object")
+
+			By("wait for the ds to get its args updated")
+			dsKey := wait.ObjectKey{
+				Namespace: nropObjInitial.Status.DaemonSets[0].Namespace,
+				Name:      nropObjInitial.Status.DaemonSets[0].Name,
+			}
+
+			Eventually(func() []string {
+				dsObj := appsv1.DaemonSet{}
+				err = fxt.Client.Get(context.TODO(), client.ObjectKey(dsKey), &dsObj)
+				Expect(err).ToNot(HaveOccurred())
+				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers, "resource-topology-exporter")
+				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q", "resource-topology-exporter")
+				return cnt.Args
+
+			}).WithTimeout(time.Minute).WithPolling(9*time.Second).Should(ContainElement(ContainSubstring("--no-publish")), "ds was not updated as expected: \"--no-pubish\" arg is missing.")
+			By("waiting for DaemonSet to be ready")
+			_, err = wait.With(e2eclient.Client).Interval(10*time.Second).Timeout(3*time.Minute).ForDaemonSetReadyByKey(context.TODO(), dsKey)
+			Expect(err).ToNot(HaveOccurred(), "failed to get the daemonset %s: %v", dsKey.String(), err)
+
 		})
 
 		AfterEach(func() {
