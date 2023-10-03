@@ -111,6 +111,12 @@ spec:
         path: nodeGroups[0].config.podsFingerprinting
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
+      - description: InfoRefreshPause defines if RTE update for NRTs is paused for the machines
+          belonging to this group
+        displayName: Enable or disable the RTE pause setting
+        path: nodeGroups[0].config.infoRefreshPause
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
       - description: Optional Namespace/Name glob patterns of pod to ignore at node
           level
         displayName: Optional ignore pod namespace/name glob patterns

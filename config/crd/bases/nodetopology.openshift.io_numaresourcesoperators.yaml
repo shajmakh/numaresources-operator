@@ -83,6 +83,13 @@ spec:
                           - Enabled
                           - EnabledExclusiveResources
                           type: string
+                        infoRefreshPause:
+                          description: InfoRefreshPause defines if RTE update for NRTs is
+                            paused for the machines belonging to this group
+                          enum:
+                          - Disabled
+                          - Enabled
+                          type: string
                       type: object
                     machineConfigPoolSelector:
                       description: MachineConfigPoolSelector defines label selector
@@ -299,6 +306,13 @@ spec:
                           - Disabled
                           - Enabled
                           - EnabledExclusiveResources
+                          type: string
+                        infoRefreshPause:
+                          description: InfoRefreshPause defines if RTE update for NRTs is
+                            paused for the machines belonging to this group
+                          enum:
+                          - Disabled
+                          - Enabled
                           type: string
                       type: object
                     name:
