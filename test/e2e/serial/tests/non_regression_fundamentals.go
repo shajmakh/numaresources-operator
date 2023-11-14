@@ -19,16 +19,20 @@ package tests
 import (
 	"context"
 	"fmt"
+	e2eclient "github.com/openshift-kni/numaresources-operator/test/utils/clients"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/klog/v2"
 
+	k8swgobjupdate "github.com/k8stopologyawareschedwg/deployer/pkg/objectupdate"
 	nrtv1alpha2 "github.com/k8stopologyawareschedwg/noderesourcetopology-api/pkg/apis/topology/v1alpha2"
 
 	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
@@ -63,8 +67,14 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	Context("using the NUMA-aware scheduler without NRT data", func() {
+	Context("using the NUMA-aware scheduler without updated NRT data", func() {
+		// TODO The set of tests under this context are expecting that all worker nodes of the cluster
+		// be NROP-configured. this case is covered. However, if the cluster has other worker nodes (>2)
+		// and those nodes are not NROP-configured then the expected behavior of these tests will change
+		// and currently is missing.
 		var testPod *corev1.Pod
+		nropObjInitial := &nropv1.NUMAResourcesOperator{}
+		nroKey := objects.NROObjectKey()
 
 		BeforeEach(func() {
 			By("Disable RTE functionality hence NRT updated data publishing")
@@ -84,7 +94,6 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 				nropObjCurrent := &nropv1.NUMAResourcesOperator{}
 				err = fxt.Client.Get(context.TODO(), nroKey, nropObjCurrent)
 				Expect(err).ToNot(HaveOccurred(), "post NROP updated: cannot get %q from the cluster", nroKey.String())
-
 				return *nropObjCurrent.Status.MachineConfigPools[0].Config.InfoRefreshPause
 			}).WithTimeout(time.Minute).WithPolling(9*time.Second).Should(Equal(infoRefreshPauseMode), "failed to update the NROP object")
 
@@ -110,19 +119,42 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 		})
 
 		AfterEach(func() {
-			if testPod == nil {
-				return
+			NROToRestore := &nropv1.NUMAResourcesOperator{}
+			err := fxt.Client.Get(context.TODO(), nroKey, NROToRestore)
+			NROToRestore.Spec = nropObjInitial.Spec
+			By("wait long enough to verify the NROP object is restored")
+			err = fxt.Client.Update(context.TODO(), NROToRestore)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() nropv1.NUMAResourcesOperatorStatus {
+				nropObjCurrent := &nropv1.NUMAResourcesOperator{}
+				err = fxt.Client.Get(context.TODO(), nroKey, nropObjCurrent)
+				Expect(err).ToNot(HaveOccurred(), "post NROP updated: cannot get %q from the cluster", nroKey.String())
+
+				return nropObjCurrent.Status
+			}).WithTimeout(time.Minute).WithPolling(9*time.Second).Should(Equal(nropObjInitial.Status), "failed to restore the NROP object")
+
+			By("wait for the ds to get its args updated")
+			dsKey := wait.ObjectKey{
+				Namespace: nropObjInitial.Status.DaemonSets[0].Namespace,
+				Name:      nropObjInitial.Status.DaemonSets[0].Name,
 			}
 
-			err := fxt.Client.Delete(context.TODO(), testPod)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() []string {
+				dsObj := appsv1.DaemonSet{}
+				err := fxt.Client.Get(context.TODO(), client.ObjectKey(dsKey), &dsObj)
+				Expect(err).ToNot(HaveOccurred())
+				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers, "resource-topology-exporter")
+				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q", "resource-topology-exporter")
+				return cnt.Args
+			}).WithTimeout(time.Minute).WithPolling(9*time.Second).ShouldNot(ContainElement(ContainSubstring("--no-publish")), "ds was not updated as expected: \"--no-pubish\" arg is missing.")
+			By("waiting for DaemonSet to be ready")
 
-			By("checking the test pod is removed")
-			err = wait.With(fxt.Client).Timeout(3*time.Minute).ForPodDeleted(context.TODO(), testPod.Namespace, testPod.Name)
-			Expect(err).ToNot(HaveOccurred())
+			_, err = wait.With(e2eclient.Client).Interval(10*time.Second).Timeout(3*time.Minute).ForDaemonSetReadyByKey(context.TODO(), dsKey)
+			Expect(err).ToNot(HaveOccurred(), "failed to get the daemonset %s: %v", dsKey.String(), err)
+
 		})
 
-		It("[tier1] should run a best-effort pod", func() {
+		It("[tier1] should make a best-effort pod pending", func() {
 			testPod = objects.NewTestPodPause(fxt.Namespace.Name, "testpod")
 			testPod.Spec.SchedulerName = serialconfig.Config.SchedulerName
 
@@ -130,22 +162,18 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 			err := fxt.Client.Create(context.TODO(), testPod)
 			Expect(err).ToNot(HaveOccurred())
 
-			updatedPod, err := wait.With(fxt.Client).Timeout(5*time.Minute).ForPodPhase(context.TODO(), testPod.Namespace, testPod.Name, corev1.PodRunning)
+			err = wait.With(fxt.Client).Interval(10*time.Second).Steps(3).WhileInPodPhase(context.TODO(), testPod.Namespace, testPod.Name, corev1.PodPending)
 			if err != nil {
-				_ = objects.LogEventsForPod(fxt.K8sClient, updatedPod.Namespace, updatedPod.Name)
+				_ = objects.LogEventsForPod(fxt.K8sClient, testPod.Namespace, testPod.Name)
 			}
 			Expect(err).ToNot(HaveOccurred())
-
-			schedOK, err := nrosched.CheckPODWasScheduledWith(fxt.K8sClient, updatedPod.Namespace, updatedPod.Name, serialconfig.Config.SchedulerName)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(schedOK).To(BeTrue(), "pod %s/%s not scheduled with expected scheduler %s", updatedPod.Namespace, updatedPod.Name, serialconfig.Config.SchedulerName)
 		})
 
-		It("[tier1] should run a burstable pod", func() {
+		It("[tier1] should make a burstable pod pending", func() {
 			testPod = objects.NewTestPodPause(fxt.Namespace.Name, "testpod")
 			testPod.Spec.SchedulerName = serialconfig.Config.SchedulerName
 			testPod.Spec.Containers[0].Resources.Requests = corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceCPU:    resource.MustParse("8"),
 				corev1.ResourceMemory: resource.MustParse("256Mi"),
 			}
 
@@ -153,22 +181,20 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 			err := fxt.Client.Create(context.TODO(), testPod)
 			Expect(err).ToNot(HaveOccurred())
 
-			updatedPod, err := wait.With(fxt.Client).Timeout(5*time.Minute).ForPodPhase(context.TODO(), testPod.Namespace, testPod.Name, corev1.PodRunning)
+			err = wait.With(fxt.Client).Interval(10*time.Second).Steps(3).WhileInPodPhase(context.TODO(), testPod.Namespace, testPod.Name, corev1.PodPending)
 			if err != nil {
-				_ = objects.LogEventsForPod(fxt.K8sClient, updatedPod.Namespace, updatedPod.Name)
+				_ = objects.LogEventsForPod(fxt.K8sClient, testPod.Namespace, testPod.Name)
 			}
 			Expect(err).ToNot(HaveOccurred())
-
-			schedOK, err := nrosched.CheckPODWasScheduledWith(fxt.K8sClient, updatedPod.Namespace, updatedPod.Name, serialconfig.Config.SchedulerName)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(schedOK).To(BeTrue(), "pod %s/%s not scheduled with expected scheduler %s", updatedPod.Namespace, updatedPod.Name, serialconfig.Config.SchedulerName)
 		})
 
-		It("[tier1][test_id:47611] should run a guaranteed pod", func() {
+		FIt("[tier1][test_id:47611] should make a guaranteed pod pending", func() {
+			//TODO check pod events has "invalid node topology data" in case all workers are
+
 			testPod = objects.NewTestPodPause(fxt.Namespace.Name, "testpod")
 			testPod.Spec.SchedulerName = serialconfig.Config.SchedulerName
 			testPod.Spec.Containers[0].Resources.Limits = corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceCPU:    resource.MustParse("8"),
 				corev1.ResourceMemory: resource.MustParse("256Mi"),
 			}
 
@@ -176,15 +202,20 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 			err := fxt.Client.Create(context.TODO(), testPod)
 			Expect(err).ToNot(HaveOccurred())
 
-			updatedPod, err := wait.With(fxt.Client).Timeout(5*time.Minute).ForPodPhase(context.TODO(), testPod.Namespace, testPod.Name, corev1.PodRunning)
+			err = wait.With(fxt.Client).Interval(10*time.Second).Steps(3).WhileInPodPhase(context.TODO(), testPod.Namespace, testPod.Name, corev1.PodPending)
 			if err != nil {
-				_ = objects.LogEventsForPod(fxt.K8sClient, updatedPod.Namespace, updatedPod.Name)
+				_ = objects.LogEventsForPod(fxt.K8sClient, testPod.Namespace, testPod.Name)
 			}
 			Expect(err).ToNot(HaveOccurred())
 
-			schedOK, err := nrosched.CheckPODWasScheduledWith(fxt.K8sClient, updatedPod.Namespace, updatedPod.Name, serialconfig.Config.SchedulerName)
+			By("verify pod events contain the correct message \"invalid node topology data\"")
+			ok, err := verifyPodEvents(fxt, testPod, "FailedScheduling", "invalid node topology data")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(schedOK).To(BeTrue(), "pod %s/%s not scheduled with expected scheduler %s", updatedPod.Namespace, updatedPod.Name, serialconfig.Config.SchedulerName)
+			if !ok {
+				_ = objects.LogEventsForPod(fxt.K8sClient, testPod.Namespace, testPod.Name)
+			}
+			Expect(ok).To(BeTrue(), "failed to find the expected event with Reason=\"FailedScheduling\" and Message contains: \"invalid node topology data\"")
+
 		})
 	})
 
@@ -394,4 +425,17 @@ func accumulatePodNamespacedNames(pods []*corev1.Pod) string {
 		podNames = append(podNames, pod.Namespace+"/"+pod.Name)
 	}
 	return strings.Join(podNames, ",")
+}
+
+func verifyPodEvents(fxt *e2efixture.Fixture, pod *corev1.Pod, ereason, emsg string) (bool, error) {
+	events, err := objects.GetEventsForPod(fxt.K8sClient, pod.Namespace, pod.Name)
+	if err != nil {
+		return false, fmt.Errorf("failed to get events for pod %s/%s; error: %v", pod.Namespace, pod.Name, err)
+	}
+	for _, e := range events {
+		if e.Reason == "FailedScheduling" && strings.Contains(e.Message, "invalid node topology data") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
