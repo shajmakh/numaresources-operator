@@ -140,7 +140,7 @@ func DaemonSetArgs(ds *appsv1.DaemonSet, conf nropv1.NodeGroupConfig) error {
 	klog.V(2).InfoS("DaemonSet update: InfoRefreshPause status", "daemonset", ds.Name, "enabled", infoRefreshPauseEnabled)
 	if infoRefreshPauseEnabled {
 		flags.SetToggle("--no-publish")
-	} else if _, ok := flags.GetFlag("--no-publish"); ok {
+	} else {
 		flags.Delete("--no-publish")
 	}
 
@@ -148,7 +148,9 @@ func DaemonSetArgs(ds *appsv1.DaemonSet, conf nropv1.NodeGroupConfig) error {
 
 	notifEnabled := isNotifyFileEnabled(&conf)
 	klog.V(2).InfoS("DaemonSet update: event notification", "daemonset", ds.Name, "enabled", notifEnabled)
-	if !notifEnabled {
+	if notifEnabled {
+		flags.SetOption("--notify-file", "/run/rte/notify")
+	} else {
 		flags.Delete("--notify-file")
 	}
 
