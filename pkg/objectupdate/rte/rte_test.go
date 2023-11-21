@@ -45,7 +45,7 @@ var testDs = &appsv1.DaemonSet{
 						},
 						Args: []string{
 							"--sleep-interval=10s",
-							"--notify-file=/run/rte/notify", // made up path, not necessarily the final one
+							//"--notify-file=/run/rte/notify", // made up path, not necessarily the final one
 							"--podresources-socket=unix:///host-var/lib/kubelet/pod-resources/kubelet.sock",
 							"--sysfs=/host-sys",
 							"--topology-manager-policy=restricted",
@@ -84,7 +84,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 			name: "defaults",
 			conf: nropv1.DefaultNodeGroupConfig(),
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
 			},
 		},
 		{
@@ -95,7 +95,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				},
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=32s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=32s",
 			},
 		},
 		{
@@ -104,7 +104,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				PodsFingerprinting: &pfpEnabled,
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
 			},
 		},
 		{
@@ -113,7 +113,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				PodsFingerprinting: &pfpEnabledExclusiveResources,
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=with-exclusive-resources", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=with-exclusive-resources", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
 			},
 		},
 		{
@@ -131,7 +131,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				InfoRefreshMode: &refreshEvents,
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--notify-file=/run/rte/notify",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--notify-file=/run/rte/notify", "--sleep-interval=10s",
 			},
 		},
 		{
@@ -140,7 +140,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				InfoRefreshMode: &refreshPeriodic,
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
 			},
 		},
 		{
@@ -149,7 +149,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				InfoRefreshPause: &infoRefreshPauseEnabled,
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=all", "--no-publish", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--no-publish", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
 			},
 		},
 		{
@@ -158,7 +158,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				InfoRefreshPause: &infoRefreshPauseDisabled,
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--sleep-interval=10s",
 			},
 		},
 	}
@@ -179,6 +179,16 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 }
 
 func expectCommandLine(t *testing.T, ds, origDs *appsv1.DaemonSet, testName string, expectedArgs []string) {
+	uncontrolledArgs := []string{
+		//	"--notify-file=/run/rte/notify",
+		"--podresources-socket=unix:///host-var/lib/kubelet/pod-resources/kubelet.sock",
+		"--sysfs=/host-sys",
+		"--topology-manager-policy=restricted",
+		"--topology-manager-scope=pod",
+	}
+	if len(expectedArgs) != len(ds.Spec.Template.Spec.Containers[0].Args)-len(uncontrolledArgs) {
+		t.Errorf("ds RTE container arguments does not match the expected; ds args \"%v\" vs expected args \"%v\"", ds.Spec.Template.Spec.Containers[0].Args, expectedArgs)
+	}
 	for _, arg := range expectedArgs {
 		if idx := sliceIndex(ds.Spec.Template.Spec.Containers[0].Args, arg); idx == -1 {
 			t.Errorf("%s: %s option missing from %v", testName, arg, ds.Spec.Template.Spec.Containers[0].Args)
