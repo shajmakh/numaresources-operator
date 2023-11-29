@@ -31,6 +31,7 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	manifests "github.com/k8stopologyawareschedwg/deployer/pkg/manifests"
 	k8swgobjupdate "github.com/k8stopologyawareschedwg/deployer/pkg/objectupdate"
 	nrtv1alpha2 "github.com/k8stopologyawareschedwg/noderesourcetopology-api/pkg/apis/topology/v1alpha2"
 
@@ -107,8 +108,8 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 				dsObj := appsv1.DaemonSet{}
 				err = fxt.Client.Get(context.TODO(), client.ObjectKey(dsKey), &dsObj)
 				Expect(err).ToNot(HaveOccurred())
-				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers, "resource-topology-exporter")
-				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q", "resource-topology-exporter")
+				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers, manifests.ContainerNameRTE)
+				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q",  manifests.ContainerNameRTE)
 				return cnt.Args
 
 			}).WithTimeout(time.Minute).WithPolling(9*time.Second).Should(ContainElement(ContainSubstring("--no-publish")), "ds was not updated as expected: \"--no-pubish\" arg is missing.")
@@ -143,8 +144,8 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 				dsObj := appsv1.DaemonSet{}
 				err := fxt.Client.Get(context.TODO(), client.ObjectKey(dsKey), &dsObj)
 				Expect(err).ToNot(HaveOccurred())
-				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers, "resource-topology-exporter")
-				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q", "resource-topology-exporter")
+				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers,  manifests.ContainerNameRTE)
+				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q",  manifests.ContainerNameRTE)
 				return cnt.Args
 			}).WithTimeout(time.Minute).WithPolling(9*time.Second).ShouldNot(ContainElement(ContainSubstring("--no-publish")), "ds was not updated as expected: \"--no-pubish\" arg is missing.")
 			By("waiting for DaemonSet to be ready")
