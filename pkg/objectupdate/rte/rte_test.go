@@ -18,6 +18,7 @@ package rte
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,7 +132,7 @@ func TestUpdateDaemonSetArgs(t *testing.T) {
 				InfoRefreshMode: &refreshEvents,
 			},
 			expectedArgs: []string{
-				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--notify-file=/run/rte/notify", "--sleep-interval=10s",
+				"--pods-fingerprint", "--pods-fingerprint-status-file=/run/pfpstatus/dump.json", "--pods-fingerprint-method=all", "--refresh-node-resources", "--add-nrt-owner=false", "--notify-file=/run/rte/notify",
 			},
 		},
 		{
@@ -189,6 +190,7 @@ func expectCommandLine(t *testing.T, ds, origDs *appsv1.DaemonSet, testName stri
 	if len(expectedArgs) != len(ds.Spec.Template.Spec.Containers[0].Args) {
 		t.Errorf("ds RTE container arguments does not match the expected; ds args \"%v\" vs expected args \"%v\"", ds.Spec.Template.Spec.Containers[0].Args, expectedArgs)
 	}
+
 	for _, arg := range expectedArgs {
 		if idx := sliceIndex(ds.Spec.Template.Spec.Containers[0].Args, arg); idx == -1 {
 			t.Errorf("%s: %s option missing from %v", testName, arg, ds.Spec.Template.Spec.Containers[0].Args)
@@ -205,6 +207,19 @@ func expectCommandLine(t *testing.T, ds, origDs *appsv1.DaemonSet, testName stri
 	if !reflect.DeepEqual(origDs.Spec.Template.Spec.Containers[1].Command, ds.Spec.Template.Spec.Containers[1].Command) {
 		t.Errorf("%s: unexpected change on command: %v", testName, ds.Spec.Template.Spec.Containers[1].Command)
 	}
+}
+
+func getSetFromStringList(args []string) map[string]string {
+	argsSet := map[string]string{}
+	for _, arg := range args {
+		keyVal := strings.Split(arg, "=")
+		if len(keyVal) == 1 {
+			argsSet[keyVal[0]] = ""
+			continue
+		}
+		argsSet[keyVal[0]] = keyVal[1]
+	}
+	return argsSet
 }
 
 func sliceIndex(sl []string, s string) int {

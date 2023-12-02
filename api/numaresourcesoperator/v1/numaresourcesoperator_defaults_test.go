@@ -38,7 +38,7 @@ func TestNodeGroupConfigDefaultMethod(t *testing.T) {
 				PodsFingerprinting: defaultPodsFingerprinting(),
 				InfoRefreshMode:    defaultInfoRefreshMode(),
 				InfoRefreshPeriod:  defaultInfoRefreshPeriod(),
-				InfoRefreshPause:           defaultInfoRefreshPause(),
+				InfoRefreshPause:   defaultInfoRefreshPause(),
 			},
 		},
 		{
@@ -50,7 +50,7 @@ func TestNodeGroupConfigDefaultMethod(t *testing.T) {
 				PodsFingerprinting: defaultPodsFingerprinting(),
 				InfoRefreshMode:    defaultInfoRefreshMode(),
 				InfoRefreshPeriod:  ptrToDuration(42 * time.Second),
-				InfoRefreshPause:           defaultInfoRefreshPause(),
+				InfoRefreshPause:   defaultInfoRefreshPause(),
 			},
 		},
 		{
@@ -62,7 +62,7 @@ func TestNodeGroupConfigDefaultMethod(t *testing.T) {
 				PodsFingerprinting: defaultPodsFingerprinting(),
 				InfoRefreshMode:    defaultInfoRefreshMode(),
 				InfoRefreshPeriod:  defaultInfoRefreshPeriod(),
-				InfoRefreshPause:           ptrToRTEMode(InfoRefreshPauseEnabled),
+				InfoRefreshPause:   ptrToRTEMode(InfoRefreshPauseEnabled),
 			},
 		},
 	}
@@ -91,7 +91,7 @@ func TestNodeGroupConfigDefault(t *testing.T) {
 		PodsFingerprinting: &podsFp,
 		InfoRefreshMode:    &refMode,
 		InfoRefreshPeriod:  &period,
-		InfoRefreshPause:           &infoRefreshPause,
+		InfoRefreshPause:   &infoRefreshPause,
 	})
 	got := toJSON(DefaultNodeGroupConfig())
 

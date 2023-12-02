@@ -674,7 +674,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				PodsFingerprinting: &pfpMode,
 				InfoRefreshPeriod:  &period,
 				InfoRefreshMode:    &refMode,
-				InfoRefreshPause:           &rteMode,
+				InfoRefreshPause:   &rteMode,
 			}
 
 			nro := testobjs.NewNUMAResourcesOperatorWithNodeGroupConfig(objectnames.DefaultNUMAResourcesOperatorCrName, &labSel, &conf)
@@ -703,7 +703,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				PodsFingerprinting: &pfpMode,
 				InfoRefreshPeriod:  &period,
 				InfoRefreshMode:    &refMode,
-				InfoRefreshPause:           &rteMode,
+				InfoRefreshPause:   &rteMode,
 			}
 
 			nro := testobjs.NewNUMAResourcesOperatorWithNodeGroupConfig(objectnames.DefaultNUMAResourcesOperatorCrName, &labSel, &conf)
@@ -891,7 +891,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 			confUpdated := nropv1.NodeGroupConfig{
 				InfoRefreshPeriod: &period,
 				InfoRefreshMode:   &refMode,
-				InfoRefreshPause:          &rteMode,
+				InfoRefreshPause:  &rteMode,
 			}
 
 			key := client.ObjectKeyFromObject(nro)
