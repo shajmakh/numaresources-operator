@@ -108,7 +108,7 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 				err = fxt.Client.Get(context.TODO(), client.ObjectKey(dsKey), &dsObj)
 				Expect(err).ToNot(HaveOccurred())
 				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers, manifests.ContainerNameRTE)
-				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q",  manifests.ContainerNameRTE)
+				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q", manifests.ContainerNameRTE)
 				return cnt.Args
 
 			}).WithTimeout(time.Minute).WithPolling(9*time.Second).Should(ContainElement(ContainSubstring("--no-publish")), "ds was not updated as expected: \"--no-pubish\" arg is missing.")
@@ -121,6 +121,7 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 		AfterEach(func() {
 			NROToRestore := &nropv1.NUMAResourcesOperator{}
 			err := fxt.Client.Get(context.TODO(), nroKey, NROToRestore)
+			Expect(err).ToNot(HaveOccurred())
 			NROToRestore.Spec = nropObjInitial.Spec
 			By("wait long enough to verify the NROP object is restored")
 			err = fxt.Client.Update(context.TODO(), NROToRestore)
@@ -143,8 +144,8 @@ var _ = Describe("[serial][fundamentals][scheduler][nonreg] numaresources fundam
 				dsObj := appsv1.DaemonSet{}
 				err := fxt.Client.Get(context.TODO(), client.ObjectKey(dsKey), &dsObj)
 				Expect(err).ToNot(HaveOccurred())
-				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers,  manifests.ContainerNameRTE)
-				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q",  manifests.ContainerNameRTE)
+				cnt := k8swgobjupdate.FindContainerByName(dsObj.Spec.Template.Spec.Containers, manifests.ContainerNameRTE)
+				Expect(cnt).NotTo(BeNil(), "cannot find container data for %q", manifests.ContainerNameRTE)
 				return cnt.Args
 			}).WithTimeout(time.Minute).WithPolling(9*time.Second).ShouldNot(ContainElement(ContainSubstring("--no-publish")), "ds was not updated as expected: \"--no-pubish\" arg is missing.")
 			By("waiting for DaemonSet to be ready")
