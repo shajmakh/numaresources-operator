@@ -1,3 +1,4 @@
+package tests
 /*
  * Copyright 2022 Red Hat, Inc.
  *
@@ -17,32 +18,32 @@
 package tests
 
 import (
-	"context"
-	"fmt"
-	"math/rand"
-	"time"
+"context"
+"fmt"
+"math/rand"
+"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+. "github.com/onsi/ginkgo/v2"
+. "github.com/onsi/gomega"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+corev1 "k8s.io/api/core/v1"
+"k8s.io/apimachinery/pkg/api/resource"
+metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+"k8s.io/klog/v2"
+"sigs.k8s.io/controller-runtime/pkg/client"
 
-	nrtv1alpha2 "github.com/k8stopologyawareschedwg/noderesourcetopology-api/pkg/apis/topology/v1alpha2"
+nrtv1alpha2 "github.com/k8stopologyawareschedwg/noderesourcetopology-api/pkg/apis/topology/v1alpha2"
 
-	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
-	e2enrtint "github.com/openshift-kni/numaresources-operator/internal/noderesourcetopology"
-	e2ereslist "github.com/openshift-kni/numaresources-operator/internal/resourcelist"
-	"github.com/openshift-kni/numaresources-operator/internal/wait"
-	serialconfig "github.com/openshift-kni/numaresources-operator/test/e2e/serial/config"
-	e2efixture "github.com/openshift-kni/numaresources-operator/test/utils/fixture"
-	"github.com/openshift-kni/numaresources-operator/test/utils/images"
-	e2enrt "github.com/openshift-kni/numaresources-operator/test/utils/noderesourcetopologies"
-	"github.com/openshift-kni/numaresources-operator/test/utils/nrosched"
-	"github.com/openshift-kni/numaresources-operator/test/utils/objects"
+nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
+e2enrtint "github.com/openshift-kni/numaresources-operator/internal/noderesourcetopology"
+e2ereslist "github.com/openshift-kni/numaresources-operator/internal/resourcelist"
+"github.com/openshift-kni/numaresources-operator/internal/wait"
+serialconfig "github.com/openshift-kni/numaresources-operator/test/e2e/serial/config"
+e2efixture "github.com/openshift-kni/numaresources-operator/test/utils/fixture"
+"github.com/openshift-kni/numaresources-operator/test/utils/images"
+e2enrt "github.com/openshift-kni/numaresources-operator/test/utils/noderesourcetopologies"
+"github.com/openshift-kni/numaresources-operator/test/utils/nrosched"
+"github.com/openshift-kni/numaresources-operator/test/utils/objects"
 )
 
 const (
