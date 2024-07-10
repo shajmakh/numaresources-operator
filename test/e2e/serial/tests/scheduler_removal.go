@@ -42,7 +42,7 @@ import (
 	serialconfig "github.com/openshift-kni/numaresources-operator/test/e2e/serial/config"
 )
 
-var _ = Describe("[serial][disruptive][scheduler][rmsched] numaresources scheduler removal on a live cluster", Serial, Label("disruptive", "scheduler", "rmsched"), func() {
+var _ = Describe("[serial][disruptive][scheduler][rmsched] numaresources scheduler removal on a live cluster", Serial, Label("disruptive", "scheduler", "rmsched"), Label("feature:rmsched"), func() {
 	var fxt *e2efixture.Fixture
 
 	BeforeEach(func() {
@@ -88,7 +88,7 @@ var _ = Describe("[serial][disruptive][scheduler][rmsched] numaresources schedul
 			}
 		})
 
-		It("[case:2][test_id:49093][tier1][unsched] should keep new scheduled workloads pending", Label("tier1", "unsched"), func() {
+		It("[case:2][test_id:49093][tier1][unsched] should keep new scheduled workloads pending", Label("tier1", "unsched"), Label("feature:unsched"), func() {
 			var err error
 
 			By(fmt.Sprintf("deleting the NRO Scheduler object: %s", serialconfig.Config.NROSchedObj.Name))
