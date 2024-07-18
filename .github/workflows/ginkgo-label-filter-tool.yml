@@ -1,0 +1,41 @@
+
+name: Build mkginkgoLabelFilter tool binary
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout sources
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: setup golang
+        uses: actions/setup-go@v2
+        id: go
+        with:
+          go-version: 1.22.4
+
+  build:
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout sources
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: build ginkgo label-filter generator tool
+        run: make bin/mkginkgolabelfilter
+
+      - name: release the tool binary
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: bin/mkginkgolabelfilter
