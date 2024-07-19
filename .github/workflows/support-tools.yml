@@ -32,7 +32,9 @@ jobs:
           fetch-depth: 0
 
       - name: build tools' binaries
-        run: make build-tools-all
+        run: |
+          make bin/mkginkgolabelfilter
+          make bin/catkubeletconfmap
 
       - name: release the binaries
         uses: ncipollo/release-action@v1
