@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 0
 
       - name: build ginkgo label-filter generator tool
-        run: make bin/mkginkgolabelfilter
+        run: make build-tools-all
 
       - name: release the tool binary
         uses: ncipollo/release-action@v1
