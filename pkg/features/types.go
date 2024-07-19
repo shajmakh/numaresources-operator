@@ -21,6 +21,9 @@ type Topics struct {
 }
 
 func (tp Topics) Clone() Topics {
+	if tp.Active == nil {
+		return Topics{}
+	}
 	return Topics{
 		Active: append([]string{}, tp.Active...),
 	}
