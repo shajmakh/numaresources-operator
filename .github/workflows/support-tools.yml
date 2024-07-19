@@ -4,7 +4,7 @@ name: Build support tools binaries
 on:
   push:
     tags:
-      - 'test-tools-tag'
+      - '*'
 
   workflow_dispatch:
 
