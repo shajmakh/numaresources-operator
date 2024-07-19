@@ -36,10 +36,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: build ginkgo label-filter generator tool
+      - name: build tools' binaries
         run: make build-tools-all
 
-      - name: release the tool binary
+      - name: release the binaries
         uses: ncipollo/release-action@v1
         with:
           artifacts: bin/.
