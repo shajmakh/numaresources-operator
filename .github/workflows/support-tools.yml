@@ -42,5 +42,5 @@ jobs:
       - name: release the binaries
         uses: ncipollo/release-action@v1
         with:
-          artifacts: bin/.
-          tag: tools-v1.0
+          artifacts: bin/*
+          tag: support-tools
