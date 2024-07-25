@@ -19,8 +19,10 @@ package objectnames
 import "fmt"
 
 const (
-	DefaultNUMAResourcesOperatorCrName  = "numaresourcesoperator"
-	DefaultNUMAResourcesSchedulerCrName = "numaresourcesscheduler"
+	DefaultNUMAResourcesOperatorCrName   = "numaresourcesoperator"
+	DefaultNUMAResourcesSchedulerCrName  = "numaresourcesscheduler"
+	DefaultNUMAResourcesControllerDpName = "numaresources-controller-manager"
+	NUMAResourcesNamespace               = "openshift-numaresources"
 )
 
 func GetMachineConfigName(instanceName, mcpName string) string {
