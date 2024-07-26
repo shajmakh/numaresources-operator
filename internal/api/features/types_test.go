@@ -37,7 +37,7 @@ func TestValidate(t *testing.T) {
 	testTp := GetTopics()
 	expectedTp, err := testTp.Validate()
 	if err != nil {
-		t.Errorf("validation failed. expected %+v found %+v", expectedTp, testTp)
+		t.Errorf("validation failed while expected pass. expected %+v found %+v", expectedTp, testTp)
 	}
 
 	testTp = NewTopicInfo()

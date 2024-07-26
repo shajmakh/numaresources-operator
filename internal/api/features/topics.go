@@ -19,6 +19,8 @@ package features
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
+	"strings"
 )
 
 //go:embed _topics.json
@@ -31,4 +33,11 @@ func GetTopics() TopicInfo {
 	tp.Active = tmp.Active
 
 	return tp
+}
+
+func BuildFilterConsistAny(key string, values []string) (string, error) {
+	if strings.TrimSpace(key) == "" {
+		return "", fmt.Errorf("empty key")
+	}
+	return fmt.Sprintf("%s: consistAny {%s}\n", key, strings.Join(values, ",")), nil
 }

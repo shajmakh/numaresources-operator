@@ -38,3 +38,47 @@ func TestGetTopics(t *testing.T) {
 		t.Errorf("embedded supported topics are not as expected, expected:\n%+v\nfound:\n%+v", expected, actual)
 	}
 }
+
+func TestBuildFilterConsistAny(t *testing.T) {
+	type testcase struct {
+		name     string
+		key      string
+		values   []string
+		expected string
+	}
+	testCases := []testcase{
+		{
+			name:     "two values",
+			key:      "app",
+			values:   []string{"foo", "bar"},
+			expected: "app: consistAny {foo,bar}",
+		},
+		{
+			name:     "one value",
+			key:      "app",
+			values:   []string{"foo"},
+			expected: "app: consistAny {foo}",
+		},
+		{
+			name:     "empty key",
+			key:      "  ",
+			values:   []string{"foo", "bar"},
+			expected: "",
+		},
+		{
+			name:     "empty values",
+			key:      "app",
+			values:   []string{},
+			expected: "app: consistAny {}",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.expected, func(t *testing.T) {
+			got, _ := BuildFilterConsistAny(tc.key, tc.values)
+			if got != tc.expected {
+				t.Errorf("expected %q got %q", tc.expected, got)
+			}
+		})
+	}
+}

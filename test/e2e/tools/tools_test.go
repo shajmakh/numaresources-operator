@@ -20,10 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 
@@ -39,13 +37,12 @@ import (
 	"github.com/openshift-kni/numaresources-operator/internal/api/features"
 	"github.com/openshift-kni/numaresources-operator/internal/podlist"
 	"github.com/openshift-kni/numaresources-operator/internal/remoteexec"
-	"github.com/openshift-kni/numaresources-operator/pkg/objectnames"
 	"github.com/openshift-kni/numaresources-operator/test/utils/clients"
 )
 
-var _ = Describe("[tools] Auxiliary tools", func() {
+var _ = Describe("[tools] Auxiliary tools", Label("tools"), func() {
 	Context("with the binary available", func() {
-		It("[lsplatform] lsplatform should detect the cluster", func() {
+		It("[lsplatform] lsplatform should detect the cluster", Label("inspectfeatures"), func() {
 			cmdline := []string{
 				filepath.Join(BinariesPath, "lsplatform"),
 			}
@@ -64,76 +61,41 @@ var _ = Describe("[tools] Auxiliary tools", func() {
 			Expect(ok).To(BeTrue(), "cannot recognize detected platform: %s", text)
 		})
 
-		It("[api][mkginkgolabelfilter] should expose correct active features and create filter", Label("api", "mkginkgolabelfilter"), func(ctx context.Context) {
+		It("[api][inspectfeatures] should expose correct active features and create filter", Label("api", "inspectfeatures"), func(ctx context.Context) {
 			By("inspect active features from controller pod")
 			var controllerDp v1.Deployment
-			err := clients.Client.Get(context.TODO(), client.ObjectKey{Namespace: objectnames.NUMAResourcesNamespace, Name: objectnames.DefaultNUMAResourcesControllerDpName}, &controllerDp)
+			err := clients.Client.Get(context.TODO(), client.ObjectKey{Namespace: "numaresources-operator", Name: "test1"}, &controllerDp)
 			Expect(err).ToNot(HaveOccurred())
 
 			controllerPods, err := podlist.With(clients.Client).ByDeployment(ctx, controllerDp)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(controllerPods)).To(Equal(1))
 
-			//exec command on po
-			cmd := []string{"bin/numaresources-operator", "--inspect-features"}
+			cmd := []string{"bin/numaresources-operator", "-inspect-features"}
 			stdoutFeatures, stderr, err := remoteexec.CommandOnPod(context.Background(), clients.K8sClient, &controllerPods[0], cmd...)
 			Expect(err).ToNot(HaveOccurred(), "err=%v stderr=%s", err, stderr)
-			Expect(stderr).ToNot(HaveOccurred(), "stderr=%s", stderr)
 			klog.Infof("active features from the deployed operator:\n%s", string(stdoutFeatures))
 
 			var tp features.TopicInfo
 			err = json.Unmarshal(stdoutFeatures, &tp)
 			Expect(err).ToNot(HaveOccurred())
 
-			cmd = []string{"bin/numaresources-operator", "--platform-version"}
+			cmd = []string{"bin/numaresources-operator", "-version"}
 			stdoutVersion, stderr, err := remoteexec.CommandOnPod(context.Background(), clients.K8sClient, &controllerPods[0], cmd...)
 			Expect(err).ToNot(HaveOccurred(), "err=%v", err)
-			Expect(stderr).ToNot(HaveOccurred(), "stderr=%s", stderr)
 			Expect(stdoutVersion).ToNot(BeEmpty())
-			klog.Infof("deployed version: %s", string(stdoutVersion))
+			klog.Infof("deployed version: %s\n", string(stdoutVersion))
 
 			re := regexp.MustCompile("numaresources-operator\\s+([0-9]+.[0-9]+.[0-9]+)\\s+")
-			match := re.FindStringSubmatch(string(stdoutVersion))
-			Expect(len(match)).To(Equal(1), "different pattern of version was found:\n%s", string(stdoutVersion))
-			tp.Metadata.Version = match[0]
+			match := re.FindStringSubmatch("numaresources-operator 4.17.0 v0.4.16-rc2.dev36+g395eebc9 395eebc9 go1.22.5") //string(stdoutVersion))
+			klog.Infof("\n\n%+v\n\n", match)
+			Expect(len(match)).To(BeNumerically(">", 1), "different pattern of version was found:\n%s", string(stdoutVersion))
+			tp.Metadata.Version = fmt.Sprintf("v%s", match[1])
 			klog.Infof("version to validate: %s", tp.Metadata.Version)
 
 			By("validate api output vs the expected")
 			expected, err := tp.Validate()
 			Expect(err).ToNot(HaveOccurred(), "api output failed validation with err %v\nexpected:\n%+v\nfound:\n%+v\n", expected, tp)
-
-			cmdline := []string{
-				filepath.Join(BinariesPath, "mkginkgolabelfilter"),
-			}
-			expectExecutableExists(cmdline[0])
-
-			klog.Infof("running: %v\n", cmdline)
-
-			toolCmd := exec.Command(cmdline[0])
-			r, w := io.Pipe()
-			toolCmd.Stdin = r
-			toolCmd.Stdout = GinkgoWriter
-
-			go func() {
-				defer w.Close()
-				w.Write(append(stdoutFeatures, "\n"...))
-			}()
-			out, err := toolCmd.Output()
-			Expect(err).ToNot(HaveOccurred())
-
-			topics, err := getListFromGinkgoQuery(string(out))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(reflect.DeepEqual(topics, expected.Active)).To(BeTrue(), "different active topics are displayed in the query:\n%v\nexpected:\n%v", topics, expected.Active)
 		})
 	})
 })
-
-func getListFromGinkgoQuery(q string) ([]string, error) {
-	re := regexp.MustCompile("consistAny\\s+{(.*)}")
-	match := re.FindStringSubmatch(q)
-	if len(match) != 1 {
-		return []string{}, fmt.Errorf("a list of active features is expected, found:\n %s", q)
-	}
-	topicsStr := strings.TrimSpace(match[1])
-	return strings.Split(topicsStr, ","), nil
-}

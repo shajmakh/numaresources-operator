@@ -21,18 +21,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
-	"github.com/openshift-kni/numaresources-operator/pkg/features"
+	"github.com/openshift-kni/numaresources-operator/internal/api/features"
 )
 
 func main() {
-	var topics features.Topics
+	var topics features.TopicInfo
 
 	err := json.NewDecoder(os.Stdin).Decode(&topics)
 	if err != nil {
 		log.Fatalf("error decoding topics data: %v", err)
 	}
-
-	fmt.Printf("feature: consistAny {%s}\n", strings.Join(topics.Active, ","))
+	filter, _ := features.BuildFilterConsistAny("feature", topics.Active)
+	fmt.Printf("%s\n", filter)
 }

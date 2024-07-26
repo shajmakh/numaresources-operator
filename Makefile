@@ -389,24 +389,24 @@ build-tools: goversion bin/buildhelper bin/envsubst bin/lsplatform
 build-tools-all: goversion bin/buildhelper bin/envsubst bin/lsplatform bin/catkubeletconfmap bin/watchnrtattr bin/mkginkgolabelfilter
 
 bin/buildhelper:
-	CGO_ENABLED=0 go build -o bin/buildhelper tools/buildhelper/buildhelper.go
+	@go build -o bin/buildhelper tools/buildhelper/buildhelper.go
 
 bin/envsubst:
-	CGO_ENABLED=0 go build -o bin/envsubst tools/envsubst/envsubst.go
+	@go build -o bin/envsubst tools/envsubst/envsubst.go
 
 bin/lsplatform:
-	CGO_ENABLED=0 go build -o bin/lsplatform tools/lsplatform/lsplatform.go
+	@go build -o bin/lsplatform tools/lsplatform/lsplatform.go
 
 bin/catkubeletconfmap:
 	LDFLAGS="-static"
 	CGO_ENABLED=0 go build -o bin/catkubeletconfmap -ldflags "$$LDFLAGS" tools/catkubeletconfmap/catkubeletconfmap.go
 
 bin/watchnrtattr:
-	CGO_ENABLED=0 go build -o bin/watchnrtattr tools/watchnrtattr/watchnrtattr.go
+	@go build -o bin/watchnrtattr tools/watchnrtattr/watchnrtattr.go
 
 bin/mkginkgolabelfilter:
 	LDFLAGS="-static"
-	CGO_ENABLED=0 go build -o bin/mkginkgolabelfilter -ldflags "$$LDFLAGS" tools/mkginkgolabelfilter/mkginkgolabelfilter.go
+	@go build -o bin/mkginkgolabelfilter -ldflags "$$LDFLAGS" tools/mkginkgolabelfilter/mkginkgolabelfilter.go
 
 verify-generated: bundle generate
 	@echo "Verifying that all code is committed after updating deps and formatting and generating code"
