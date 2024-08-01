@@ -784,9 +784,21 @@ func sriovToleration() corev1.Toleration {
 }
 
 func waitForMcpUpdate(cli client.Client, ctx context.Context, mcps []*machineconfigv1.MachineConfigPool) {
+	//before triggering mcp update:
+	//0. mcp should be in updated status
+	//1. list nodes under the mcp
+	//2. pick one node and return the current config
+
+	// get currentConfig as param in the function
+	// waitforupdating should return error and desiredconfig
+	// desired config should be different from first currentconfig OR equal to d
+	// waitforupdated should return error and currentconfig
+	// currentconfig should be equal to desiredconfig and no harm to check it is also diffirent from first current
+
 	By("waiting for mcp to start updating")
 	Expect(waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdating)).To(Succeed())
 
 	By("wait for mcp to get updated")
 	Expect(waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdated)).To(Succeed())
+
 }

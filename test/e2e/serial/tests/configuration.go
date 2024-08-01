@@ -1001,5 +1001,7 @@ func waitForMcpsCondition(cli client.Client, ctx context.Context, mcps []*machin
 			return err
 		})
 	}
-	return eg.Wait()
+	err := eg.Wait()
+
+	return mc, err
 }
