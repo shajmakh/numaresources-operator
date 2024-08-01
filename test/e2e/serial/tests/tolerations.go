@@ -785,8 +785,8 @@ func sriovToleration() corev1.Toleration {
 
 func waitForMcpUpdate(cli client.Client, ctx context.Context, mcps []*machineconfigv1.MachineConfigPool) {
 	By("waiting for mcp to start updating")
-	waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdating)
+	Expect(waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdating)).To(Succeed())
 
 	By("wait for mcp to get updated")
-	waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdated)
+	Expect(waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdated)).To(Succeed())
 }
