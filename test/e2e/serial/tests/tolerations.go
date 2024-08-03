@@ -19,6 +19,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/labels"
 	"strings"
 	"time"
 
@@ -782,23 +783,52 @@ func sriovToleration() corev1.Toleration {
 		Effect:   corev1.TaintEffectNoSchedule,
 	}
 }
-
 func waitForMcpUpdate(cli client.Client, ctx context.Context, mcps []*machineconfigv1.MachineConfigPool) {
-	//before triggering mcp update:
-	//0. mcp should be in updated status
-	//1. list nodes under the mcp
-	//2. pick one node and return the current config
-
-	// get currentConfig as param in the function
-	// waitforupdating should return error and desiredconfig
-	// desired config should be different from first currentconfig OR equal to d
-	// waitforupdated should return error and currentconfig
-	// currentconfig should be equal to desiredconfig and no harm to check it is also diffirent from first current
-
 	By("waiting for mcp to start updating")
-	Expect(waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdating)).To(Succeed())
+	if err := waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdating); err != nil {
+		klog.Warningf("failed to find mcps while in updating status")
+	}
 
 	By("wait for mcp to get updated")
+	//here we must fail
 	Expect(waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdated)).To(Succeed())
 
+	By("ensure nodes has updated MC")
+	/* MCP gets updated=false & updating=true in 2 cases:
+	1. mc is being updated with new configuration -> new CONFIG
+	2. machine count is increasing -> same CONFIG but different machine count
+
+	when checking for MCP update the switch between the mcp conditions can be faster than the intervals if we use a simple wait loop on a specific condition,
+	At the end of this function we want to be sure that either the update failed for the right reason or updated successfully regardless the time it took (there is a timeout ofc).
+
+	We want to avoid duplicating mco work so we depend on what it reports, and there are 2 options:
+	1. 	for every node in the mcp, verify for currentconfig==desiredconfig==mcp.spec.configuration.name
+	2. on the mcp, wait for the updated condition to report "Message: All nodes are updated with MachineConfig rendered-<mcp.spec.configuration.name>" and verify the report time is greater than the old one
+	*/
+	verifyUpdatedMCOnNodes(cli, ctx, mcps)
+}
+
+func verifyUpdatedMCOnNodes(cli client.Client, ctx context.Context, mcps []*machineconfigv1.MachineConfigPool) {
+	for _, mcp := range mcps {
+		klog.Infof("verify mcp %q", mcp.Name)
+		nodeLabels := mcp.Spec.NodeSelector.MatchLabels
+		selector := labels.SelectorFromSet(nodeLabels)
+
+		nodes := &corev1.NodeList{}
+		Expect(cli.List(ctx, nodes, &client.ListOptions{LabelSelector: selector})).To(Succeed(), "failed listing nodes matching under mcp %q", mcp.Name)
+		Expect(nodes).ToNot(BeEmpty())
+		klog.Infof("found %d nodes")
+
+		var updatedMcp *machineconfigv1.MachineConfigPool
+		Expect(cli.Get(ctx, client.ObjectKeyFromObject(mcp), updatedMcp)).To(Succeed())
+		expectedMc := fmt.Sprintf("rendered-%s", mcp.Spec.Configuration.Name)
+
+		for _, node := range nodes.Items {
+			desired := node.Annotations[wait.DesiredConfigNodeAnnotation]
+			Expect(desired).To(Equal(expectedMc), "desired mc mismatch for node %q", node.Name)
+
+			current := node.Annotations[wait.CurrentConfigNodeAnnotation]
+			Expect(current).To(Equal(desired), "current mc mismatch for node %q", node.Name)
+		}
+	}
 }
