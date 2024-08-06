@@ -789,8 +789,8 @@ func waitForMcpUpdate(cli client.Client, ctx context.Context, mcps []*machinecon
 		klog.Warningf("failed to find mcps while in updating status")
 	}
 
-	By("wait for mcp to get updated")
-	//here we must fail
+	By("wait for mcps to get updated")
+	//here we must fail on errors
 	Expect(waitForMcpsCondition(cli, ctx, mcps, machineconfigv1.MachineConfigPoolUpdated)).To(Succeed())
 
 	By("ensure nodes has updated MC")
@@ -811,17 +811,18 @@ func waitForMcpUpdate(cli client.Client, ctx context.Context, mcps []*machinecon
 func verifyUpdatedMCOnNodes(cli client.Client, ctx context.Context, mcps []*machineconfigv1.MachineConfigPool) {
 	for _, mcp := range mcps {
 		klog.Infof("verify mcp %q", mcp.Name)
-		nodeLabels := mcp.Spec.NodeSelector.MatchLabels
+		var updatedMcp machineconfigv1.MachineConfigPool
+		Expect(cli.Get(ctx, client.ObjectKeyFromObject(mcp), &updatedMcp)).To(Succeed())
+
+		nodeLabels := updatedMcp.Spec.NodeSelector.MatchLabels
 		selector := labels.SelectorFromSet(nodeLabels)
 
 		nodes := &corev1.NodeList{}
-		Expect(cli.List(ctx, nodes, &client.ListOptions{LabelSelector: selector})).To(Succeed(), "failed listing nodes matching under mcp %q", mcp.Name)
-		Expect(nodes).ToNot(BeEmpty())
-		klog.Infof("found %d nodes")
+		Expect(cli.List(ctx, nodes, &client.ListOptions{LabelSelector: selector})).To(Succeed(), "failed listing nodes matching under mcp %q", updatedMcp.Name)
+		Expect(len(nodes.Items)).To(BeNumerically(">", 0))
+		klog.Infof("found %d nodes", len(nodes.Items))
 
-		var updatedMcp *machineconfigv1.MachineConfigPool
-		Expect(cli.Get(ctx, client.ObjectKeyFromObject(mcp), updatedMcp)).To(Succeed())
-		expectedMc := fmt.Sprintf("rendered-%s", mcp.Spec.Configuration.Name)
+		expectedMc := updatedMcp.Spec.Configuration.Name
 
 		for _, node := range nodes.Items {
 			desired := node.Annotations[wait.DesiredConfigNodeAnnotation]
@@ -830,5 +831,6 @@ func verifyUpdatedMCOnNodes(cli client.Client, ctx context.Context, mcps []*mach
 			current := node.Annotations[wait.CurrentConfigNodeAnnotation]
 			Expect(current).To(Equal(desired), "current mc mismatch for node %q", node.Name)
 		}
+		klog.Infof("nodes are updated with mc of the mcp %q: %s", updatedMcp.Name, expectedMc)
 	}
 }

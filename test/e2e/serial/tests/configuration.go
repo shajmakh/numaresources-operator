@@ -150,7 +150,7 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 
 			defer func() {
 				By(fmt.Sprintf("CLEANUP: deleting mcp: %q", mcp.Name))
-				err = fxt.Client.Delete(context.TODO(), mcp)
+				err := fxt.Client.Delete(context.TODO(), mcp)
 				Expect(err).ToNot(HaveOccurred())
 
 				err = wait.With(fxt.Client).
@@ -169,11 +169,10 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 
 			defer func() {
 				By(fmt.Sprintf("CLEANUP: restore initial labels of node %q with %q", targetedNode.Name, nodes.GetLabelRoleWorker()))
-				err = unlabelFunc()
-				Expect(err).ToNot(HaveOccurred())
-
+				Expect(unlabelFunc()).To(Succeed())
 				//this will trigger node reboot as the NROP settings will be reapplied to the unlabelled node
 				waitForMcpUpdate(fxt.Client, context.TODO(), initialMcps)
+
 			}()
 
 			waitForMcpUpdate(fxt.Client, context.TODO(), newMcps)
@@ -213,7 +212,7 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 				waitForMcpUpdate(fxt.Client, context.TODO(), mcps)
 			}() //end of defer
 
-			By("waiting for the mcps to start updating")
+			By("waiting for the mcps update")
 			// on old mcp because the ds will no longer include the worker node that is not labeled with mcp-test
 			waitForMcpUpdate(fxt.Client, context.TODO(), initialMcps)
 
