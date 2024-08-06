@@ -124,21 +124,9 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 			Expect(ok).To(BeTrue())
 			targetedNode := workers[targetIdx]
 
-			By(fmt.Sprintf("Label node %q with %q and remove the label %q from it", targetedNode.Name, nodes.GetLabelRoleMCPTest(), nodes.GetLabelRoleWorker()))
-			unlabelFunc, err := labelNode(fxt.Client, nodes.GetLabelRoleMCPTest(), targetedNode.Name)
+			// save the initial nrop mcp to use it later while waiting for mcp to get updated
+			initialMcps, err := nropmcp.GetListByNodeGroupsV1(context.TODO(), e2eclient.Client, nroOperObj.Spec.NodeGroups)
 			Expect(err).ToNot(HaveOccurred())
-
-			labelFunc, err := unlabelNode(fxt.Client, nodes.GetLabelRoleWorker(), "", targetedNode.Name)
-			Expect(err).ToNot(HaveOccurred())
-
-			defer func() {
-				By(fmt.Sprintf("CLEANUP: restore initial labels of node %q with %q", targetedNode.Name, nodes.GetLabelRoleWorker()))
-				err = unlabelFunc()
-				Expect(err).ToNot(HaveOccurred())
-
-				err = labelFunc()
-				Expect(err).ToNot(HaveOccurred())
-			}()
 
 			mcp := objects.TestMCP()
 			By(fmt.Sprintf("creating new MCP: %q", mcp.Name))
@@ -162,7 +150,7 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 
 			defer func() {
 				By(fmt.Sprintf("CLEANUP: deleting mcp: %q", mcp.Name))
-				err = fxt.Client.Delete(context.TODO(), mcp)
+				err := fxt.Client.Delete(context.TODO(), mcp)
 				Expect(err).ToNot(HaveOccurred())
 
 				err = wait.With(fxt.Client).
@@ -170,11 +158,24 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 					Timeout(configuration.MachineConfigPoolUpdateTimeout).
 					ForMachineConfigPoolDeleted(context.TODO(), mcp)
 				Expect(err).ToNot(HaveOccurred())
+
+			}()
+			//so far 0 machine count for mcp-test -> no nodes -> no updates status
+			newMcps := []*machineconfigv1.MachineConfigPool{mcp}
+
+			By(fmt.Sprintf("Label node %q with %q", targetedNode.Name, nodes.GetLabelRoleMCPTest()))
+			unlabelFunc, err := labelNode(fxt.Client, nodes.GetLabelRoleMCPTest(), targetedNode.Name)
+			Expect(err).ToNot(HaveOccurred())
+
+			defer func() {
+				By(fmt.Sprintf("CLEANUP: restore initial labels of node %q with %q", targetedNode.Name, nodes.GetLabelRoleWorker()))
+				Expect(unlabelFunc()).To(Succeed())
+				//this will trigger node reboot as the NROP settings will be reapplied to the unlabelled node
+				waitForMcpUpdate(fxt.Client, context.TODO(), initialMcps)
+
 			}()
 
-			// save the initial nrop mcp to use it later while waiting for mcp to get updated
-			initialMcps, err := nropmcp.GetListByNodeGroupsV1(context.TODO(), e2eclient.Client, nroOperObj.Spec.NodeGroups)
-			Expect(err).ToNot(HaveOccurred())
+			waitForMcpUpdate(fxt.Client, context.TODO(), newMcps)
 
 			By(fmt.Sprintf("modifying the NUMAResourcesOperator nodeGroups field to match new mcp: %q labels %q", mcp.Name, mcp.Labels))
 			Eventually(func(g Gomega) {
@@ -206,39 +207,14 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 				mcps, err := nropmcp.GetListByNodeGroupsV1(context.TODO(), e2eclient.Client, nroOperObj.Spec.NodeGroups)
 				Expect(err).ToNot(HaveOccurred())
 
-				By("waiting for mcp to start updating")
-				err = waitForMcpsCondition(fxt.Client, context.TODO(), mcps, machineconfigv1.MachineConfigPoolUpdating)
-				Expect(err).ToNot(HaveOccurred())
-
-				By("wait for mcp to get updated")
-				err = waitForMcpsCondition(fxt.Client, context.TODO(), mcps, machineconfigv1.MachineConfigPoolUpdated)
-				Expect(err).ToNot(HaveOccurred())
+				By("waiting for mcps to start updating")
+				// this will trigger mcp update only for the initial mcps because the mcp-test nodes are still labeled with the old labels
+				waitForMcpUpdate(fxt.Client, context.TODO(), mcps)
 			}() //end of defer
 
-			// here we expect mcp-test and worker mcps to get updated.
-			// worker will take much longer to get updated as a node reboot will
-			// be triggered on the node labeled with mcp-test.
-			// mcp-test (the new mcp): will be created as new one and thus it'll start with empty updating status,
-			// thus the waiting will continue until it's completely updated.
-			// worker (the old mcp): will be in updated at the beginning but will start updating once the target node
-			// is ruled by the new mcp, thus it will take it time to appear as updating.
-			// to catch and wait for the mcp updates properly we do this:
-			// wait on mcp-test for it to get updated; & for worker mcp: 1. wait on it to start updating; 2. wait on it to finish updating
-
-			newMcps, err := nropmcp.GetListByNodeGroupsV1(context.TODO(), e2eclient.Client, nroOperObj.Spec.NodeGroups)
-			Expect(err).ToNot(HaveOccurred())
-
-			By("waiting for the new mcps to get updated")
-			err = waitForMcpsCondition(fxt.Client, context.TODO(), newMcps, machineconfigv1.MachineConfigPoolUpdated)
-			Expect(err).ToNot(HaveOccurred())
-
-			By("waiting for the old mcps to start updating")
-			err = waitForMcpsCondition(fxt.Client, context.TODO(), initialMcps, machineconfigv1.MachineConfigPoolUpdating)
-			Expect(err).ToNot(HaveOccurred())
-
-			By("waiting for the old mcps to get updated")
-			err = waitForMcpsCondition(fxt.Client, context.TODO(), initialMcps, machineconfigv1.MachineConfigPoolUpdated)
-			Expect(err).ToNot(HaveOccurred())
+			By("waiting for the mcps update")
+			// on old mcp because the ds will no longer include the worker node that is not labeled with mcp-test
+			waitForMcpUpdate(fxt.Client, context.TODO(), initialMcps)
 
 			By(fmt.Sprintf("Verify RTE daemonsets have the updated node selector matching to the new mcp %q", mcp.Name))
 			Eventually(func() (bool, error) {
