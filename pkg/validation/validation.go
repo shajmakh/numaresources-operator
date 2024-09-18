@@ -36,9 +36,7 @@ const (
 func MachineConfigPoolDuplicates(trees []nodegroupv1.Tree) error {
 	duplicates := map[string]int{}
 	for _, tree := range trees {
-		for _, mcp := range tree.MachineConfigPools {
-			duplicates[mcp.Name] += 1
-		}
+		duplicates[tree.MachineConfigPool.Name] += 1
 	}
 
 	var duplicateErrors []string

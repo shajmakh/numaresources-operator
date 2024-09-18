@@ -20,7 +20,6 @@ import (
 	"strings"
 	"testing"
 
-	machineconfigv1 "github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
@@ -42,10 +41,10 @@ func TestMachineConfigPoolDuplicates(t *testing.T) {
 			name: "duplicate MCP name",
 			trees: []nodegroupv1.Tree{
 				{
-					MachineConfigPools: []*machineconfigv1.MachineConfigPool{
-						testobjs.NewMachineConfigPool("test", nil, nil, nil),
-						testobjs.NewMachineConfigPool("test", nil, nil, nil),
-					},
+					MachineConfigPool: testobjs.NewMachineConfigPool("test", nil, nil, nil),
+				},
+				{
+					MachineConfigPool: testobjs.NewMachineConfigPool("test", nil, nil, nil),
 				},
 			},
 			expectedError:        true,
@@ -55,10 +54,10 @@ func TestMachineConfigPoolDuplicates(t *testing.T) {
 			name: "no duplicates",
 			trees: []nodegroupv1.Tree{
 				{
-					MachineConfigPools: []*machineconfigv1.MachineConfigPool{
-						testobjs.NewMachineConfigPool("test", nil, nil, nil),
-						testobjs.NewMachineConfigPool("test1", nil, nil, nil),
-					},
+					MachineConfigPool: testobjs.NewMachineConfigPool("test", nil, nil, nil),
+				},
+				{
+					MachineConfigPool: testobjs.NewMachineConfigPool("test1", nil, nil, nil),
 				},
 			},
 		},

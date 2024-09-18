@@ -75,33 +75,32 @@ func (em *ExistingManifests) MachineConfigsState(mf rtemanifests.Manifests) []ob
 		return ret
 	}
 	for _, tree := range em.trees {
-		for _, mcp := range tree.MachineConfigPools {
-			mcName := objectnames.GetMachineConfigName(em.instance.Name, mcp.Name)
-			if mcp.Spec.MachineConfigSelector == nil {
-				klog.Warningf("the machine config pool %q does not have machine config selector", mcp.Name)
-				continue
-			}
-			desiredMachineConfig := mf.MachineConfig.DeepCopy()
-			// prefix machine config name to guarantee that we will have an option to override it
-			desiredMachineConfig.Name = mcName
-			desiredMachineConfig.Labels = GetMachineConfigLabel(mcp)
-
-			existingMachineConfig, ok := em.machineConfigs[mcName]
-			if !ok {
-				klog.Warningf("failed to find machine config %q under the namespace %q", mcName, desiredMachineConfig.Namespace)
-				continue
-			}
-
-			ret = append(ret,
-				objectstate.ObjectState{
-					Existing: existingMachineConfig.machineConfig,
-					Error:    existingMachineConfig.machineConfigError,
-					Desired:  desiredMachineConfig,
-					Compare:  compare.Object,
-					Merge:    merge.ObjectForUpdate,
-				},
-			)
+		mcp := tree.MachineConfigPool
+		mcName := objectnames.GetMachineConfigName(em.instance.Name, mcp.Name)
+		if mcp.Spec.MachineConfigSelector == nil {
+			klog.Warningf("the machine config pool %q does not have machine config selector", mcp.Name)
+			continue
 		}
+		desiredMachineConfig := mf.MachineConfig.DeepCopy()
+		// prefix machine config name to guarantee that we will have an option to override it
+		desiredMachineConfig.Name = mcName
+		desiredMachineConfig.Labels = GetMachineConfigLabel(mcp)
+
+		existingMachineConfig, ok := em.machineConfigs[mcName]
+		if !ok {
+			klog.Warningf("failed to find machine config %q under the namespace %q", mcName, desiredMachineConfig.Namespace)
+			continue
+		}
+
+		ret = append(ret,
+			objectstate.ObjectState{
+				Existing: existingMachineConfig.machineConfig,
+				Error:    existingMachineConfig.machineConfigError,
+				Desired:  desiredMachineConfig,
+				Compare:  compare.Object,
+				Merge:    merge.ObjectForUpdate,
+			},
+		)
 	}
 
 	return ret
@@ -193,54 +192,53 @@ func (em *ExistingManifests) State(mf rtemanifests.Manifests, updater GenerateDe
 	}
 
 	for _, tree := range em.trees {
-		for _, mcp := range tree.MachineConfigPools {
-			var existingDs client.Object
-			var loadError error
+		mcp := tree.MachineConfigPool
+		var existingDs client.Object
+		var loadError error
 
-			generatedName := objectnames.GetComponentName(em.instance.Name, mcp.Name)
-			existingDaemonSet, ok := em.daemonSets[generatedName]
-			if ok {
-				existingDs = existingDaemonSet.daemonSet
-				loadError = existingDaemonSet.daemonSetError
-			} else {
-				loadError = fmt.Errorf("failed to find daemon set %s/%s", mf.DaemonSet.Namespace, mf.DaemonSet.Name)
-			}
-
-			desiredDaemonSet := mf.DaemonSet.DeepCopy()
-			desiredDaemonSet.Name = generatedName
-
-			var updateError error
-			if mcp.Spec.NodeSelector != nil {
-				desiredDaemonSet.Spec.Template.Spec.NodeSelector = mcp.Spec.NodeSelector.MatchLabels
-			} else {
-				updateError = fmt.Errorf("the machine config pool %q does not have node selector", mcp.Name)
-			}
-
-			if updater != nil {
-				gdm := GeneratedDesiredManifest{
-					ClusterPlatform:   em.plat,
-					MachineConfigPool: mcp.DeepCopy(),
-					NodeGroup:         tree.NodeGroup.DeepCopy(),
-					DaemonSet:         desiredDaemonSet,
-				}
-
-				err := updater(mcp.Name, &gdm)
-				if err != nil {
-					updateError = fmt.Errorf("daemonset for MCP %q: update failed: %w", mcp.Name, err)
-				}
-			}
-
-			ret = append(ret,
-				objectstate.ObjectState{
-					Existing:    existingDs,
-					Error:       loadError,
-					UpdateError: updateError,
-					Desired:     desiredDaemonSet,
-					Compare:     compare.Object,
-					Merge:       merge.ObjectForUpdate,
-				},
-			)
+		generatedName := objectnames.GetComponentName(em.instance.Name, mcp.Name)
+		existingDaemonSet, ok := em.daemonSets[generatedName]
+		if ok {
+			existingDs = existingDaemonSet.daemonSet
+			loadError = existingDaemonSet.daemonSetError
+		} else {
+			loadError = fmt.Errorf("failed to find daemon set %s/%s", mf.DaemonSet.Namespace, mf.DaemonSet.Name)
 		}
+
+		desiredDaemonSet := mf.DaemonSet.DeepCopy()
+		desiredDaemonSet.Name = generatedName
+
+		var updateError error
+		if mcp.Spec.NodeSelector != nil {
+			desiredDaemonSet.Spec.Template.Spec.NodeSelector = mcp.Spec.NodeSelector.MatchLabels
+		} else {
+			updateError = fmt.Errorf("the machine config pool %q does not have node selector", mcp.Name)
+		}
+
+		if updater != nil {
+			gdm := GeneratedDesiredManifest{
+				ClusterPlatform:   em.plat,
+				MachineConfigPool: mcp.DeepCopy(),
+				NodeGroup:         tree.NodeGroup.DeepCopy(),
+				DaemonSet:         desiredDaemonSet,
+			}
+
+			err := updater(mcp.Name, &gdm)
+			if err != nil {
+				updateError = fmt.Errorf("daemonset for MCP %q: update failed: %w", mcp.Name, err)
+			}
+		}
+
+		ret = append(ret,
+			objectstate.ObjectState{
+				Existing:    existingDs,
+				Error:       loadError,
+				UpdateError: updateError,
+				Desired:     desiredDaemonSet,
+				Compare:     compare.Object,
+				Merge:       merge.ObjectForUpdate,
+			},
+		)
 	}
 	return ret
 }
@@ -292,34 +290,32 @@ func FromClient(ctx context.Context, cli client.Client, plat platform.Platform, 
 
 	// should have the amount of resources equals to the amount of node groups
 	for _, tree := range trees {
-		for _, mcp := range tree.MachineConfigPools {
-			generatedName := objectnames.GetComponentName(instance.Name, mcp.Name)
-			key := client.ObjectKey{
-				Name:      generatedName,
-				Namespace: namespace,
-			}
-			ds := &appsv1.DaemonSet{}
-			dsm := daemonSetManifest{}
-			if dsm.daemonSetError = cli.Get(ctx, key, ds); dsm.daemonSetError == nil {
-				dsm.daemonSet = ds
-			}
-			ret.daemonSets[generatedName] = dsm
+		mcp := tree.MachineConfigPool
+		generatedName := objectnames.GetComponentName(instance.Name, mcp.Name)
+		key := client.ObjectKey{
+			Name:      generatedName,
+			Namespace: namespace,
+		}
+		ds := &appsv1.DaemonSet{}
+		dsm := daemonSetManifest{}
+		if dsm.daemonSetError = cli.Get(ctx, key, ds); dsm.daemonSetError == nil {
+			dsm.daemonSet = ds
+		}
+		ret.daemonSets[generatedName] = dsm
 
-			if plat == platform.OpenShift {
-				mcName := objectnames.GetMachineConfigName(instance.Name, mcp.Name)
-				key := client.ObjectKey{
-					Name: mcName,
-				}
-				mc := &machineconfigv1.MachineConfig{}
-				mcm := machineConfigManifest{}
-				if mcm.machineConfigError = cli.Get(ctx, key, mc); mcm.machineConfigError == nil {
-					mcm.machineConfig = mc
-				}
-				ret.machineConfigs[mcName] = mcm
+		if plat == platform.OpenShift {
+			mcName := objectnames.GetMachineConfigName(instance.Name, mcp.Name)
+			key := client.ObjectKey{
+				Name: mcName,
 			}
+			mc := &machineconfigv1.MachineConfig{}
+			mcm := machineConfigManifest{}
+			if mcm.machineConfigError = cli.Get(ctx, key, mc); mcm.machineConfigError == nil {
+				mcm.machineConfig = mc
+			}
+			ret.machineConfigs[mcName] = mcm
 		}
 	}
-
 	return ret
 }
 

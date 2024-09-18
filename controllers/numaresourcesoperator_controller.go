@@ -195,7 +195,7 @@ func messageFromError(err error) string {
 	return unwErr.Error()
 }
 
-func (r *NUMAResourcesOperatorReconciler) reconcileResourceAPI(ctx context.Context, instance *nropv1.NUMAResourcesOperator, trees []nodegroupv1.Tree) (bool, ctrl.Result, string, error) {
+func (r *NUMAResourcesOperatorReconciler) reconcileResourceAPI(ctx context.Context, instance *nropv1.NUMAResourcesOperator) (bool, ctrl.Result, string, error) {
 	applied, err := r.syncNodeResourceTopologyAPI(ctx)
 	if err != nil {
 		r.Recorder.Eventf(instance, corev1.EventTypeWarning, "FailedCRDInstall", "Failed to install Node Resource Topology CRD: %v", err)
@@ -256,7 +256,7 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResourceDaemonSet(ctx context
 }
 
 func (r *NUMAResourcesOperatorReconciler) reconcileResource(ctx context.Context, instance *nropv1.NUMAResourcesOperator, trees []nodegroupv1.Tree) (ctrl.Result, string, error) {
-	if done, res, cond, err := r.reconcileResourceAPI(ctx, instance, trees); done {
+	if done, res, cond, err := r.reconcileResourceAPI(ctx, instance); done {
 		return res, cond, err
 	}
 
@@ -357,15 +357,14 @@ func syncMachineConfigPoolsStatuses(instanceName string, trees []nodegroupv1.Tre
 
 	mcpStatuses := []nropv1.MachineConfigPool{}
 	for _, tree := range trees {
-		for _, mcp := range tree.MachineConfigPools {
-			mcpStatuses = append(mcpStatuses, extractMCPStatus(mcp, forwardMCPConds))
+		mcp := tree.MachineConfigPool
+		mcpStatuses = append(mcpStatuses, extractMCPStatus(mcp, forwardMCPConds))
 
-			isUpdated := IsMachineConfigPoolUpdated(instanceName, mcp)
-			klog.V(5).InfoS("Machine Config Pool state", "name", mcp.Name, "instance", instanceName, "updated", isUpdated)
+		isUpdated := IsMachineConfigPoolUpdated(instanceName, mcp)
+		klog.V(5).InfoS("Machine Config Pool state", "name", mcp.Name, "instance", instanceName, "updated", isUpdated)
 
-			if !isUpdated {
-				return mcpStatuses, false
-			}
+		if !isUpdated {
+			return mcpStatuses, false
 		}
 	}
 	return mcpStatuses, true
@@ -388,25 +387,23 @@ func syncMachineConfigPoolNodeGroupConfigStatuses(mcpStatuses []nropv1.MachineCo
 
 	updatedMcpStatuses := []nropv1.MachineConfigPool{}
 	for _, tree := range trees {
-		klog.V(5).InfoS("Machine Config Pool Node Group tree update", "mcps", len(tree.MachineConfigPools))
+		klog.V(5).InfoS("Machine Config Pool Node Group tree update", "mcp", len(tree.MachineConfigPool.Name))
+		mcp := tree.MachineConfigPool
+		mcpStatus := getMachineConfigPoolStatusByName(mcpStatuses, mcp.Name)
 
-		for _, mcp := range tree.MachineConfigPools {
-			mcpStatus := getMachineConfigPoolStatusByName(mcpStatuses, mcp.Name)
-
-			var confSource string
-			if tree.NodeGroup != nil && tree.NodeGroup.Config != nil {
-				confSource = "spec"
-				mcpStatus.Config = tree.NodeGroup.Config.DeepCopy()
-			} else {
-				confSource = "default"
-				ngc := nropv1.DefaultNodeGroupConfig()
-				mcpStatus.Config = &ngc
-			}
-
-			klog.V(6).InfoS("Machine Config Pool Node Group updated status config", "mcp", mcp.Name, "source", confSource, "data", mcpStatus.Config.ToString())
-
-			updatedMcpStatuses = append(updatedMcpStatuses, mcpStatus)
+		var confSource string
+		if tree.NodeGroup != nil && tree.NodeGroup.Config != nil {
+			confSource = "spec"
+			mcpStatus.Config = tree.NodeGroup.Config.DeepCopy()
+		} else {
+			confSource = "default"
+			ngc := nropv1.DefaultNodeGroupConfig()
+			mcpStatus.Config = &ngc
 		}
+
+		klog.V(6).InfoS("Machine Config Pool Node Group updated status config", "mcp", mcp.Name, "source", confSource, "data", mcpStatus.Config.ToString())
+
+		updatedMcpStatuses = append(updatedMcpStatuses, mcpStatus)
 	}
 	return updatedMcpStatuses
 }
@@ -500,9 +497,7 @@ func (r *NUMAResourcesOperatorReconciler) deleteUnusedDaemonSets(ctx context.Con
 
 	expectedDaemonSetNames := sets.NewString()
 	for _, tree := range trees {
-		for _, mcp := range tree.MachineConfigPools {
-			expectedDaemonSetNames = expectedDaemonSetNames.Insert(objectnames.GetComponentName(instance.Name, mcp.Name))
-		}
+		expectedDaemonSetNames = expectedDaemonSetNames.Insert(objectnames.GetComponentName(instance.Name, tree.MachineConfigPool.Name))
 	}
 
 	for _, ds := range daemonSetList.Items {
@@ -532,9 +527,7 @@ func (r *NUMAResourcesOperatorReconciler) deleteUnusedMachineConfigs(ctx context
 
 	expectedMachineConfigNames := sets.NewString()
 	for _, tree := range trees {
-		for _, mcp := range tree.MachineConfigPools {
-			expectedMachineConfigNames = expectedMachineConfigNames.Insert(objectnames.GetMachineConfigName(instance.Name, mcp.Name))
-		}
+		expectedMachineConfigNames = expectedMachineConfigNames.Insert(objectnames.GetMachineConfigName(instance.Name, tree.MachineConfigPool.Name))
 	}
 
 	for _, mc := range machineConfigList.Items {
@@ -711,20 +704,19 @@ func validateMachineConfigLabels(mc client.Object, trees []nodegroupv1.Tree) err
 	}
 
 	for _, tree := range trees {
-		for _, mcp := range tree.MachineConfigPools {
-			if v != mcp.Name {
-				continue
-			}
+		mcp := tree.MachineConfigPool
+		if v != mcp.Name {
+			continue
+		}
 
-			mcLabels := labels.Set(mcLabels)
-			mcSelector, err := metav1.LabelSelectorAsSelector(mcp.Spec.MachineConfigSelector)
-			if err != nil {
-				return fmt.Errorf("failed to represent machine config pool %q machine config selector as selector: %w", mcp.Name, err)
-			}
+		mcLabels := labels.Set(mcLabels)
+		mcSelector, err := metav1.LabelSelectorAsSelector(mcp.Spec.MachineConfigSelector)
+		if err != nil {
+			return fmt.Errorf("failed to represent machine config pool %q machine config selector as selector: %w", mcp.Name, err)
+		}
 
-			if !mcSelector.Matches(mcLabels) {
-				return fmt.Errorf("machine config %q labels does not match the machine config pool %q machine config selector", mc.GetName(), mcp.Name)
-			}
+		if !mcSelector.Matches(mcLabels) {
+			return fmt.Errorf("machine config %q labels does not match the machine config pool %q machine config selector", mc.GetName(), mcp.Name)
 		}
 	}
 	return nil
