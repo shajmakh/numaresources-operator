@@ -29,17 +29,14 @@ import (
 )
 
 type Tree struct {
-	NodeGroup          *nropv1.NodeGroup
-	MachineConfigPools []*mcov1.MachineConfigPool
+	NodeGroup         *nropv1.NodeGroup
+	MachineConfigPool *mcov1.MachineConfigPool
 }
 
 func (ttr Tree) Clone() Tree {
 	ret := Tree{
-		NodeGroup:          ttr.NodeGroup.DeepCopy(),
-		MachineConfigPools: make([]*mcov1.MachineConfigPool, 0, len(ttr.MachineConfigPools)),
-	}
-	for _, mcp := range ttr.MachineConfigPools {
-		ret.MachineConfigPools = append(ret.MachineConfigPools, mcp.DeepCopy())
+		NodeGroup:         ttr.NodeGroup.DeepCopy(),
+		MachineConfigPool: ttr.MachineConfigPool.DeepCopy(),
 	}
 	return ret
 }
@@ -58,23 +55,25 @@ func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup)
 			continue
 		}
 
-		treeMCPs := []*mcov1.MachineConfigPool{}
+		var treeMCP *mcov1.MachineConfigPool
 		for i := range mcps.Items {
 			mcp := &mcps.Items[i] // shortcut
 			mcpLabels := labels.Set(mcp.Labels)
-			if !selector.Matches(mcpLabels) {
-				continue
+			if selector.Matches(mcpLabels) {
+				if treeMCP != nil {
+					return nil, fmt.Errorf("found more than one MCP matching to the node group with MCP selector %q", nodeGroup.MachineConfigPoolSelector.String())
+				}
+				treeMCP = mcp
 			}
-			treeMCPs = append(treeMCPs, mcp)
 		}
 
-		if len(treeMCPs) == 0 {
+		if treeMCP == nil {
 			return nil, fmt.Errorf("failed to find MachineConfigPool for the node group with the selector %q", nodeGroup.MachineConfigPoolSelector.String())
 		}
 
 		result = append(result, Tree{
-			NodeGroup:          nodeGroup,
-			MachineConfigPools: treeMCPs,
+			NodeGroup:         nodeGroup,
+			MachineConfigPool: treeMCP,
 		})
 	}
 
@@ -92,7 +91,7 @@ func FindMachineConfigPools(mcps *mcov1.MachineConfigPoolList, nodeGroups []nrop
 func flattenTrees(trees []Tree) []*mcov1.MachineConfigPool {
 	var result []*mcov1.MachineConfigPool
 	for _, tree := range trees {
-		result = append(result, tree.MachineConfigPools...)
+		result = append(result, tree.MachineConfigPool)
 	}
 	return result
 }

@@ -17,15 +17,11 @@
 package nodegroup
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/klog/v2"
-
 	mcov1 "github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
 )
@@ -101,18 +97,16 @@ func TestFindTrees(t *testing.T) {
 			},
 			expected: []Tree{
 				{
-					MachineConfigPools: []*mcov1.MachineConfigPool{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "mcp2",
-							},
+					MachineConfigPool: &mcov1.MachineConfigPool{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "mcp2",
 						},
 					},
 				},
 			},
 		},
 		{
-			name: "ng1-mcp2",
+			name: "ng1- more than one matching MCP",
 			mcps: &mcpList,
 			ngs: []nropv1.NodeGroup{
 				{
@@ -123,25 +117,9 @@ func TestFindTrees(t *testing.T) {
 					},
 				},
 			},
-			expected: []Tree{
-				{
-					MachineConfigPools: []*mcov1.MachineConfigPool{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "mcp3",
-							},
-						},
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "mcp5",
-							},
-						},
-					},
-				},
-			},
 		},
 		{
-			name: "ng2-mcpX",
+			name: "ng2-mcp not found",
 			mcps: &mcpList,
 			ngs: []nropv1.NodeGroup{
 				{
@@ -154,32 +132,7 @@ func TestFindTrees(t *testing.T) {
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"mcp-label-3": "test3",
-						},
-					},
-				},
-			},
-			expected: []Tree{
-				{
-					MachineConfigPools: []*mcov1.MachineConfigPool{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "mcp2",
-							},
-						},
-					},
-				},
-				{
-					MachineConfigPools: []*mcov1.MachineConfigPool{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "mcp3",
-							},
-						},
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "mcp5",
-							},
+							"mcp-label": "notFound",
 						},
 					},
 				},
@@ -189,23 +142,13 @@ func TestFindTrees(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := FindTrees(tt.mcps, tt.ngs)
-			if err != nil {
+			if err != nil && len(got) != 0 {
 				t.Errorf("unexpected error: %v", err)
 			}
 			gotNames := mcpNamesFromTrees(got)
 			expectedNames := mcpNamesFromTrees(tt.expected)
 			if !reflect.DeepEqual(gotNames, expectedNames) {
 				t.Errorf("Trees mismatch: got=%v expected=%v", gotNames, expectedNames)
-			}
-
-			// backward compat
-			gotMcps, err := findListByNodeGroups(tt.mcps, tt.ngs)
-			if err != nil {
-				t.Errorf("unexpected error checking backward compat: %v", err)
-			}
-			compatNames := mcpNamesFromList(gotMcps)
-			if !reflect.DeepEqual(gotNames, compatNames) {
-				t.Errorf("Trees mismatch (non backward compatible): got=%v compat=%v", gotNames, compatNames)
 			}
 		})
 	}
@@ -289,7 +232,7 @@ func TestFindMachineConfigPools(t *testing.T) {
 			},
 		},
 		{
-			name: "ng1-mcp2",
+			name: "ng1-multiple mcps found",
 			mcps: &mcpList,
 			ngs: []nropv1.NodeGroup{
 				{
@@ -300,21 +243,9 @@ func TestFindMachineConfigPools(t *testing.T) {
 					},
 				},
 			},
-			expected: []*mcov1.MachineConfigPool{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "mcp3",
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "mcp5",
-					},
-				},
-			},
 		},
 		{
-			name: "ng2-mcpX",
+			name: "ng2-mcp not found",
 			mcps: &mcpList,
 			ngs: []nropv1.NodeGroup{
 				{
@@ -327,25 +258,8 @@ func TestFindMachineConfigPools(t *testing.T) {
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"mcp-label-3": "test3",
+							"mcp-label": "notFound",
 						},
-					},
-				},
-			},
-			expected: []*mcov1.MachineConfigPool{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "mcp2",
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "mcp3",
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "mcp5",
 					},
 				},
 			},
@@ -354,7 +268,7 @@ func TestFindMachineConfigPools(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := FindMachineConfigPools(tt.mcps, tt.ngs)
-			if err != nil {
+			if err != nil && len(tt.expected) != 0 {
 				t.Errorf("unexpected error: %v", err)
 			}
 			gotNames := mcpNamesFromList(got)
@@ -369,9 +283,7 @@ func TestFindMachineConfigPools(t *testing.T) {
 func mcpNamesFromTrees(trees []Tree) []string {
 	var result []string
 	for _, tree := range trees {
-		for _, mcp := range tree.MachineConfigPools {
-			result = append(result, mcp.Name)
-		}
+		result = append(result, tree.MachineConfigPool.Name)
 	}
 	return result
 }
@@ -382,41 +294,4 @@ func mcpNamesFromList(mcps []*mcov1.MachineConfigPool) []string {
 		result = append(result, mcp.Name)
 	}
 	return result
-}
-
-// old implementation acting as reference for comparisons
-func findListByNodeGroups(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]*mcov1.MachineConfigPool, error) {
-	var result []*mcov1.MachineConfigPool
-	for idx := range nodeGroups {
-		nodeGroup := &nodeGroups[idx]
-		found := false
-
-		// handled by validation
-		if nodeGroup.MachineConfigPoolSelector == nil {
-			continue
-		}
-
-		for i := range mcps.Items {
-			mcp := &mcps.Items[i]
-
-			selector, err := metav1.LabelSelectorAsSelector(nodeGroup.MachineConfigPoolSelector)
-			// handled by validation
-			if err != nil {
-				klog.Errorf("bad node group machine config pool selector %q", nodeGroup.MachineConfigPoolSelector.String())
-				continue
-			}
-
-			mcpLabels := labels.Set(mcp.Labels)
-			if selector.Matches(mcpLabels) {
-				found = true
-				result = append(result, mcp)
-			}
-		}
-
-		if !found {
-			return nil, fmt.Errorf("failed to find MachineConfigPool for the node group with the selector %q", nodeGroup.MachineConfigPoolSelector.String())
-		}
-	}
-
-	return result, nil
 }

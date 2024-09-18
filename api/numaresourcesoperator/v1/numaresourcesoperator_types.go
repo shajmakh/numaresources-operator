@@ -112,7 +112,6 @@ type NodeGroupConfig struct {
 }
 
 // NodeGroup defines group of nodes that will run resource topology exporter daemon set
-// You can choose the group of node by MachineConfigPoolSelector or by NodeSelector
 type NodeGroup struct {
 	// MachineConfigPoolSelector defines label selector for the machine config pool
 	// +optional
