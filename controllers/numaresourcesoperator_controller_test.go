@@ -220,7 +220,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				nro := &nropv1.NUMAResourcesOperator{}
 				Expect(reconciler.Client.Get(context.TODO(), key, nro)).NotTo(HaveOccurred())
 
-				nro.Spec.NodeGroups = []nropv1.NodeGroup{{
+				nro.Spec.NodeGroups = []nropv1.NodeGroupSpec{{
 					MachineConfigPoolSelector: &metav1.LabelSelector{MatchLabels: label1},
 				}}
 				Expect(reconciler.Client.Update(context.TODO(), nro)).NotTo(HaveOccurred())
@@ -551,7 +551,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 					&metav1.LabelSelector{MatchLabels: label3},
 					&metav1.LabelSelector{MatchLabels: label3},
 				)
-				nro.Spec.NodeGroups = []nropv1.NodeGroup{
+				nro.Spec.NodeGroups = []nropv1.NodeGroupSpec{
 					{
 						MachineConfigPoolSelector: &metav1.LabelSelector{
 							MatchLabels: label3,

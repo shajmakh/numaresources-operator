@@ -29,7 +29,7 @@ import (
 	nodegroupv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1/helper/nodegroup"
 )
 
-func GetListByNodeGroupsV1(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroup) ([]*mcov1.MachineConfigPool, error) {
+func GetListByNodeGroupsV1(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroupSpec) ([]*mcov1.MachineConfigPool, error) {
 	mcps := &mcov1.MachineConfigPoolList{}
 	if err := cli.List(ctx, mcps); err != nil {
 		return nil, err

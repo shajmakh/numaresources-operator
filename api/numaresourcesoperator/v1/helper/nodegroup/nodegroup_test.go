@@ -76,7 +76,7 @@ func TestFindTrees(t *testing.T) {
 	testCases := []struct {
 		name     string
 		mcps     *mcov1.MachineConfigPoolList
-		ngs      []nropv1.NodeGroup
+		ngs      []nropv1.NodeGroupSpec
 		expected []Tree
 	}{
 		{
@@ -86,7 +86,7 @@ func TestFindTrees(t *testing.T) {
 		{
 			name: "ng1-mcp1",
 			mcps: &mcpList,
-			ngs: []nropv1.NodeGroup{
+			ngs: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
@@ -108,7 +108,7 @@ func TestFindTrees(t *testing.T) {
 		{
 			name: "ng1- more than one matching MCP",
 			mcps: &mcpList,
-			ngs: []nropv1.NodeGroup{
+			ngs: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
@@ -121,7 +121,7 @@ func TestFindTrees(t *testing.T) {
 		{
 			name: "ng2-mcp not found",
 			mcps: &mcpList,
-			ngs: []nropv1.NodeGroup{
+			ngs: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
@@ -204,7 +204,7 @@ func TestFindMachineConfigPools(t *testing.T) {
 	testCases := []struct {
 		name     string
 		mcps     *mcov1.MachineConfigPoolList
-		ngs      []nropv1.NodeGroup
+		ngs      []nropv1.NodeGroupSpec
 		expected []*mcov1.MachineConfigPool
 	}{
 		{
@@ -214,7 +214,7 @@ func TestFindMachineConfigPools(t *testing.T) {
 		{
 			name: "ng1-mcp1",
 			mcps: &mcpList,
-			ngs: []nropv1.NodeGroup{
+			ngs: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
@@ -234,7 +234,7 @@ func TestFindMachineConfigPools(t *testing.T) {
 		{
 			name: "ng1-multiple mcps found",
 			mcps: &mcpList,
-			ngs: []nropv1.NodeGroup{
+			ngs: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
@@ -247,7 +247,7 @@ func TestFindMachineConfigPools(t *testing.T) {
 		{
 			name: "ng2-mcp not found",
 			mcps: &mcpList,
-			ngs: []nropv1.NodeGroup{
+			ngs: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{

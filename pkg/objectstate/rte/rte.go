@@ -126,7 +126,7 @@ type GeneratedDesiredManifest struct {
 	// context
 	ClusterPlatform   platform.Platform
 	MachineConfigPool *machineconfigv1.MachineConfigPool
-	NodeGroup         *nropv1.NodeGroup
+	NodeGroupSpec     *nropv1.NodeGroupSpec
 	// generated manifests
 	DaemonSet *appsv1.DaemonSet
 }
@@ -219,7 +219,7 @@ func (em *ExistingManifests) State(mf rtemanifests.Manifests, updater GenerateDe
 			gdm := GeneratedDesiredManifest{
 				ClusterPlatform:   em.plat,
 				MachineConfigPool: mcp.DeepCopy(),
-				NodeGroup:         tree.NodeGroup.DeepCopy(),
+				NodeGroupSpec:     tree.NodeGroupSpec.DeepCopy(),
 				DaemonSet:         desiredDaemonSet,
 			}
 

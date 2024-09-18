@@ -30,9 +30,9 @@ import (
 )
 
 func NewNUMAResourcesOperator(name string, labelSelectors []*metav1.LabelSelector) *nropv1.NUMAResourcesOperator {
-	var nodeGroups []nropv1.NodeGroup
+	var nodeGroups []nropv1.NodeGroupSpec
 	for _, selector := range labelSelectors {
-		nodeGroups = append(nodeGroups, nropv1.NodeGroup{
+		nodeGroups = append(nodeGroups, nropv1.NodeGroupSpec{
 			MachineConfigPoolSelector: selector,
 		})
 	}
@@ -61,7 +61,7 @@ func NewNUMAResourcesOperatorWithNodeGroupConfig(name string, selector *metav1.L
 			Name: name,
 		},
 		Spec: nropv1.NUMAResourcesOperatorSpec{
-			NodeGroups: []nropv1.NodeGroup{
+			NodeGroups: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: selector,
 					Config:                    conf,

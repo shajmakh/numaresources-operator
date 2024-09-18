@@ -34,7 +34,7 @@ func TestNodeGroupNormalizeConfigKeepsTolerations(t *testing.T) {
 		},
 	}
 
-	ng := NodeGroup{
+	ng := NodeGroupSpec{
 		Config: &NodeGroupConfig{
 			Tolerations: CloneTolerations(expectedTols),
 		},

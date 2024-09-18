@@ -84,7 +84,7 @@ func TestMachineConfigPoolDuplicates(t *testing.T) {
 func TestNodeGroupsSanity(t *testing.T) {
 	type testCase struct {
 		name                 string
-		nodeGroups           []nropv1.NodeGroup
+		nodeGroups           []nropv1.NodeGroupSpec
 		expectedError        bool
 		expectedErrorMessage string
 	}
@@ -92,7 +92,7 @@ func TestNodeGroupsSanity(t *testing.T) {
 	testCases := []testCase{
 		{
 			name: "nil MCP selector",
-			nodeGroups: []nropv1.NodeGroup{
+			nodeGroups: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: nil,
 				},
@@ -109,7 +109,7 @@ func TestNodeGroupsSanity(t *testing.T) {
 		},
 		{
 			name: "with duplicates",
-			nodeGroups: []nropv1.NodeGroup{
+			nodeGroups: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
@@ -130,7 +130,7 @@ func TestNodeGroupsSanity(t *testing.T) {
 		},
 		{
 			name: "bad MCP selector",
-			nodeGroups: []nropv1.NodeGroup{
+			nodeGroups: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -149,7 +149,7 @@ func TestNodeGroupsSanity(t *testing.T) {
 		},
 		{
 			name: "correct values",
-			nodeGroups: []nropv1.NodeGroup{
+			nodeGroups: []nropv1.NodeGroupSpec{
 				{
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{

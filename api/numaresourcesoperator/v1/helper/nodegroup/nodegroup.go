@@ -29,19 +29,19 @@ import (
 )
 
 type Tree struct {
-	NodeGroup         *nropv1.NodeGroup
+	NodeGroupSpec     *nropv1.NodeGroupSpec
 	MachineConfigPool *mcov1.MachineConfigPool
 }
 
 func (ttr Tree) Clone() Tree {
 	ret := Tree{
-		NodeGroup:         ttr.NodeGroup.DeepCopy(),
+		NodeGroupSpec:     ttr.NodeGroupSpec.DeepCopy(),
 		MachineConfigPool: ttr.MachineConfigPool.DeepCopy(),
 	}
 	return ret
 }
 
-func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]Tree, error) {
+func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroupSpec) ([]Tree, error) {
 	var result []Tree
 	for idx := range nodeGroups {
 		nodeGroup := &nodeGroups[idx] // shortcut
@@ -72,7 +72,7 @@ func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup)
 		}
 
 		result = append(result, Tree{
-			NodeGroup:         nodeGroup,
+			NodeGroupSpec:     nodeGroup,
 			MachineConfigPool: treeMCP,
 		})
 	}
@@ -80,7 +80,7 @@ func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup)
 	return result, nil
 }
 
-func FindMachineConfigPools(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]*mcov1.MachineConfigPool, error) {
+func FindMachineConfigPools(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroupSpec) ([]*mcov1.MachineConfigPool, error) {
 	trees, err := FindTrees(mcps, nodeGroups)
 	if err != nil {
 		return nil, err

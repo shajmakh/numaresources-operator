@@ -22,15 +22,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func (nodeGroup NodeGroup) NormalizeConfig() NodeGroupConfig {
+func (nodeGroupSpec NodeGroupSpec) NormalizeConfig() NodeGroupConfig {
 	conf := DefaultNodeGroupConfig()
-	if nodeGroup.Config == nil {
+	if nodeGroupSpec.Config == nil {
 		// nothing to do
 		return conf
 	}
 	// always pass through tolerations
-	conf.Tolerations = CloneTolerations(nodeGroup.Config.Tolerations)
-	return conf.Merge(*nodeGroup.Config)
+	conf.Tolerations = CloneTolerations(nodeGroupSpec.Config.Tolerations)
+	return conf.Merge(*nodeGroupSpec.Config)
 }
 
 func (current NodeGroupConfig) Merge(updated NodeGroupConfig) NodeGroupConfig {

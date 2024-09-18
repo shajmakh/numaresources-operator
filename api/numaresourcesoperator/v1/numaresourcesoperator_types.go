@@ -31,7 +31,7 @@ import (
 type NUMAResourcesOperatorSpec struct {
 	// Group of Nodes to enable RTE on
 	//+operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Group of nodes to enable RTE on"
-	NodeGroups []NodeGroup `json:"nodeGroups,omitempty"`
+	NodeGroups []NodeGroupSpec `json:"nodeGroups,omitempty"`
 	// Optional Resource Topology Exporter image URL
 	//+operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Optional RTE image URL",xDescriptors={"urn:alm:descriptor:com.tectonic.ui:text"}
 	ExporterImage string `json:"imageSpec,omitempty"`
@@ -112,7 +112,7 @@ type NodeGroupConfig struct {
 }
 
 // NodeGroup defines group of nodes that will run resource topology exporter daemon set
-type NodeGroup struct {
+type NodeGroupSpec struct {
 	// MachineConfigPoolSelector defines label selector for the machine config pool
 	// +optional
 	MachineConfigPoolSelector *metav1.LabelSelector `json:"machineConfigPoolSelector,omitempty"`

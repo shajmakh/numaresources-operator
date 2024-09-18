@@ -146,8 +146,8 @@ func (r *NUMAResourcesOperatorReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	for idx := range trees {
-		conf := trees[idx].NodeGroup.NormalizeConfig()
-		trees[idx].NodeGroup.Config = &conf
+		conf := trees[idx].NodeGroupSpec.NormalizeConfig()
+		trees[idx].NodeGroupSpec.Config = &conf
 	}
 
 	result, condition, err := r.reconcileResource(ctx, instance, trees)
@@ -392,9 +392,9 @@ func syncMachineConfigPoolNodeGroupConfigStatuses(mcpStatuses []nropv1.MachineCo
 		mcpStatus := getMachineConfigPoolStatusByName(mcpStatuses, mcp.Name)
 
 		var confSource string
-		if tree.NodeGroup != nil && tree.NodeGroup.Config != nil {
+		if tree.NodeGroupSpec != nil && tree.NodeGroupSpec.Config != nil {
 			confSource = "spec"
-			mcpStatus.Config = tree.NodeGroup.Config.DeepCopy()
+			mcpStatus.Config = tree.NodeGroupSpec.Config.DeepCopy()
 		} else {
 			confSource = "default"
 			ngc := nropv1.DefaultNodeGroupConfig()
@@ -723,9 +723,9 @@ func validateMachineConfigLabels(mc client.Object, trees []nodegroupv1.Tree) err
 }
 
 func daemonsetUpdater(mcpName string, gdm *rtestate.GeneratedDesiredManifest) error {
-	rteupdate.DaemonSetTolerations(gdm.DaemonSet, gdm.NodeGroup.Config.Tolerations)
+	rteupdate.DaemonSetTolerations(gdm.DaemonSet, gdm.NodeGroupSpec.Config.Tolerations)
 
-	err := rteupdate.DaemonSetArgs(gdm.DaemonSet, *gdm.NodeGroup.Config)
+	err := rteupdate.DaemonSetArgs(gdm.DaemonSet, *gdm.NodeGroupSpec.Config)
 	if err != nil {
 		klog.V(5).InfoS("DaemonSet update: cannot update arguments", "mcp", mcpName, "daemonset", gdm.DaemonSet.Name, "error", err)
 		return err
@@ -756,7 +756,7 @@ func isDaemonSetReady(ds *appsv1.DaemonSet) bool {
 	return ok
 }
 
-func getTreesByNodeGroup(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroup) ([]nodegroupv1.Tree, error) {
+func getTreesByNodeGroup(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroupSpec) ([]nodegroupv1.Tree, error) {
 	mcps := &machineconfigv1.MachineConfigPoolList{}
 	if err := cli.List(ctx, mcps); err != nil {
 		return nil, err
