@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
 	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
-	mcov1 "github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1"
 )
 
 var _ conversion.Convertible = &NUMAResourcesOperator{}
@@ -146,10 +145,6 @@ func (dst *NUMAResourcesOperator) ConvertFromV1Rote(src *nropv1.NUMAResourcesOpe
 func convertMachineConfigPoolV1Alpha1ToV1(src MachineConfigPool) nropv1.MachineConfigPool {
 	dst := nropv1.MachineConfigPool{}
 	dst.Name = src.Name
-	if src.Conditions != nil {
-		dst.Conditions = make([]mcov1.MachineConfigPoolCondition, len(src.Conditions))
-		copy(dst.Conditions, src.Conditions)
-	}
 	if src.Config != nil {
 		dst.Config = convertNodeGroupConfigV1Alpha1ToV1(*src.Config)
 	}
@@ -159,10 +154,6 @@ func convertMachineConfigPoolV1Alpha1ToV1(src MachineConfigPool) nropv1.MachineC
 func convertMachineConfigPoolV1ToV1Alpha1(src nropv1.MachineConfigPool) MachineConfigPool {
 	dst := MachineConfigPool{}
 	dst.Name = src.Name
-	if src.Conditions != nil {
-		dst.Conditions = make([]mcov1.MachineConfigPoolCondition, len(src.Conditions))
-		copy(dst.Conditions, src.Conditions)
-	}
 	if src.Config != nil {
 		dst.Config = convertNodeGroupConfigV1ToV1Alpha1(*src.Config)
 	}

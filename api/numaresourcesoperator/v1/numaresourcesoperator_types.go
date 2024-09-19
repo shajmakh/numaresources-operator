@@ -24,7 +24,6 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
-	mcov1 "github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1"
 )
 
 // NUMAResourcesOperatorSpec defines the desired state of NUMAResourcesOperator
@@ -141,10 +140,6 @@ type NUMAResourcesOperatorStatus struct {
 type MachineConfigPool struct {
 	// Name the name of the machine config pool
 	Name string `json:"name"`
-	// Conditions represents the latest available observations of MachineConfigPool current state.
-	// +optional
-	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Optional conditions reported for this NodeGroup"
-	Conditions []mcov1.MachineConfigPoolCondition `json:"conditions,omitempty"`
 	// NodeGroupConfig represents the latest available configuration applied to this MachineConfigPool
 	// +optional
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Optional configuration enforced on this NodeGroup"

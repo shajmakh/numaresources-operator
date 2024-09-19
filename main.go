@@ -104,24 +104,23 @@ type RenderParams struct {
 }
 
 type Params struct {
-	webhookPort           int
-	metricsAddr           string
-	enableLeaderElection  bool
-	probeAddr             string
-	platformName          string
-	platformVersion       string
-	detectPlatformOnly    bool
-	showVersion           bool
-	enableScheduler       bool
-	renderMode            bool
-	render                RenderParams
-	enableWebhooks        bool
-	enableMetrics         bool
-	enableHTTP2           bool
-	enableMCPCondsForward bool
-	image                 ImageParams
-	inspectFeatures       bool
-	enableReplicasDetect  bool
+	webhookPort          int
+	metricsAddr          string
+	enableLeaderElection bool
+	probeAddr            string
+	platformName         string
+	platformVersion      string
+	detectPlatformOnly   bool
+	showVersion          bool
+	enableScheduler      bool
+	renderMode           bool
+	render               RenderParams
+	enableWebhooks       bool
+	enableMetrics        bool
+	enableHTTP2          bool
+	image                ImageParams
+	inspectFeatures      bool
+	enableReplicasDetect bool
 }
 
 func (pa *Params) SetDefaults() {
@@ -150,7 +149,6 @@ func (pa *Params) FromFlags() {
 	flag.IntVar(&pa.webhookPort, "webhook-port", defaultWebhookPort, "The port the operator webhook should listen to.")
 	flag.BoolVar(&pa.enableMetrics, "enable-metrics", pa.enableMetrics, "enable metrics server")
 	flag.BoolVar(&pa.enableHTTP2, "enable-http2", pa.enableHTTP2, "If HTTP/2 should be enabled for the webhook servers.")
-	flag.BoolVar(&pa.enableMCPCondsForward, "enable-mcp-conds-fwd", pa.enableMCPCondsForward, "enable MCP Status Condition forwarding")
 	flag.StringVar(&pa.image.Exporter, "image-exporter", pa.image.Exporter, "use this image as default for the RTE")
 	flag.StringVar(&pa.image.Scheduler, "image-scheduler", pa.image.Scheduler, "use this image as default for the scheduler")
 	flag.BoolVar(&pa.enableReplicasDetect, "detect-replicas", pa.enableReplicasDetect, "autodetect optimal replica count")
@@ -263,7 +261,6 @@ func main() {
 		Images:          imgs,
 		ImagePullPolicy: pullPolicy,
 		Namespace:       namespace,
-		ForwardMCPConds: params.enableMCPCondsForward,
 	}).SetupWithManager(mgr); err != nil {
 		klog.ErrorS(err, "unable to create controller", "controller", "NUMAResourcesOperator")
 		os.Exit(1)
