@@ -382,8 +382,8 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 
 						key := client.ObjectKeyFromObject(nro)
 						Expect(reconciler.Client.Get(context.TODO(), key, nro)).ToNot(HaveOccurred())
-						Expect(len(nro.Status.MachineConfigPools)).To(Equal(1))
-						Expect(nro.Status.MachineConfigPools[0].Name).To(Equal("test1"))
+						Expect(len(nro.Status.NodeGroups)).To(Equal(1))
+						Expect(nro.Status.NodeGroups[0].MachineConfigPoolName).To(Equal("test1"))
 					})
 				})
 
@@ -497,7 +497,6 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 							Expect(err).ToNot(HaveOccurred())
 						})
 						It(" operator status should report RelatedObjects as expected", func() {
-
 							By("Getting updated NROP Status")
 							key := client.ObjectKeyFromObject(nro)
 							nroUpdated := &nropv1.NUMAResourcesOperator{}
@@ -523,15 +522,17 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 								},
 							}
 							// ... and one for each DaemonSet
-							for _, ds := range nroUpdated.Status.DaemonSets {
+							for _, ngStatus := range nroUpdated.Status.NodeGroups {
+								if ngStatus.DaemonSet.String() == string(nropv1.Separator) {
+									continue
+								}
 								expected = append(expected, configv1.ObjectReference{
 									Group:     "apps",
 									Resource:  "daemonsets",
-									Namespace: ds.Namespace,
-									Name:      ds.Name,
+									Namespace: ngStatus.DaemonSet.Namespace,
+									Name:      ngStatus.DaemonSet.Name,
 								})
 							}
-
 							Expect(len(nroUpdated.Status.RelatedObjects)).To(Equal(len(expected)))
 							Expect(nroUpdated.Status.RelatedObjects).To(ContainElements(expected))
 						})
@@ -688,8 +689,8 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 			nroUpdated := &nropv1.NUMAResourcesOperator{}
 			Expect(reconciler.Client.Get(context.TODO(), client.ObjectKeyFromObject(nro), nroUpdated)).ToNot(HaveOccurred())
 
-			Expect(len(nroUpdated.Status.MachineConfigPools)).To(Equal(1))
-			Expect(nroUpdated.Status.MachineConfigPools[0].Name).To(Equal(mcp.Name))
+			Expect(len(nroUpdated.Status.NodeGroups)).To(Equal(1))
+			Expect(nroUpdated.Status.NodeGroups[0].MachineConfigPoolName).To(Equal(mcp.Name))
 			// TODO check the actual returned config. We need to force the condition as Available for this.
 		})
 

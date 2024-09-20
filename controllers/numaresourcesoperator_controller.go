@@ -218,14 +218,14 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResourceMachineConfig(ctx con
 
 	// MCO need to update SELinux context and other stuff, and need to trigger a reboot.
 	// It can take a while.
-	mcpStatuses, allMCPsUpdated := syncMachineConfigPoolsStatuses(instance.Name, trees)
-	instance.Status.MachineConfigPools = mcpStatuses
+	nodeGroupsWithMCPs, allMCPsUpdated := syncMachineConfigPoolsStatuses(instance.Name, trees)
+	instance.Status.NodeGroups = nodeGroupsWithMCPs
 	if !allMCPsUpdated {
 		// the Machine Config Pool still did not apply the machine config, wait for one minute
 		return true, ctrl.Result{RequeueAfter: numaResourcesRetryPeriod}, status.ConditionProgressing, nil
 	}
 
-	instance.Status.MachineConfigPools = syncMachineConfigPoolNodeGroupConfigStatuses(instance.Status.MachineConfigPools, trees)
+	instance.Status.NodeGroups = syncMachineConfigPoolNodeGroupConfigStatuses(instance.Status.NodeGroups, trees)
 	return false, ctrl.Result{}, "", nil
 }
 
@@ -239,10 +239,19 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResourceDaemonSet(ctx context
 		return false, ctrl.Result{}, "", nil
 	}
 
+	var expectedDaemonSetsInfo []nropv1.NamespacedName
+	for _, ngstatus := range instance.Status.NodeGroups {
+		mcpDSName := objectnames.GetComponentName(instance.Name, ngstatus.MachineConfigPoolName)
+		expectedDaemonSetsInfo = append(expectedDaemonSetsInfo, nropv1.NamespacedName{Name: mcpDSName})
+	}
+	err = validation.EqualNamespacedDSSlicesByName(expectedDaemonSetsInfo, daemonSetsInfo)
+	if err != nil {
+		return true, ctrl.Result{}, status.ConditionDegraded, err
+	}
+
 	r.Recorder.Eventf(instance, corev1.EventTypeNormal, "SuccessfulRTECreate", "Created Resource-Topology-Exporter DaemonSets")
 
-	dsStatuses, allDSsUpdated, err := r.syncDaemonSetsStatuses(ctx, r.Client, daemonSetsInfo)
-	instance.Status.DaemonSets = dsStatuses
+	dsStatuses, allDSsUpdated, err := r.syncDaemonSetsStatuses(ctx, r.Client, instance, daemonSetsInfo)
 	instance.Status.RelatedObjects = relatedobjects.ResourceTopologyExporter(r.Namespace, dsStatuses)
 	if err != nil {
 		return true, ctrl.Result{}, status.ConditionDegraded, err
@@ -272,7 +281,7 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResource(ctx context.Context,
 	return ctrl.Result{}, status.ConditionAvailable, nil
 }
 
-func (r *NUMAResourcesOperatorReconciler) syncDaemonSetsStatuses(ctx context.Context, rd client.Reader, daemonSetsInfo []nropv1.NamespacedName) ([]nropv1.NamespacedName, bool, error) {
+func (r *NUMAResourcesOperatorReconciler) syncDaemonSetsStatuses(ctx context.Context, rd client.Reader, instance *nropv1.NUMAResourcesOperator, daemonSetsInfo []nropv1.NamespacedName) ([]nropv1.NamespacedName, bool, error) {
 	dsStatuses := []nropv1.NamespacedName{}
 	for _, nname := range daemonSetsInfo {
 		ds := appsv1.DaemonSet{}
@@ -288,6 +297,20 @@ func (r *NUMAResourcesOperatorReconciler) syncDaemonSetsStatuses(ctx context.Con
 		if !isDaemonSetReady(&ds) {
 			return dsStatuses, false, nil
 		}
+
+		ngDetected := false
+		for _, ngStatus := range instance.Status.NodeGroups {
+			if ngStatus.MachineConfigPoolName == objectnames.GetAssociatedNameFromRTEDaemonset(nname.Name, instance.Name) {
+				ngStatus.DaemonSet = nname
+				ngDetected = true
+				break
+			}
+		}
+
+		if !ngDetected {
+			return dsStatuses, false, fmt.Errorf("could not detect node group matching daemonset %s", nname.Name)
+		}
+
 		dsStatuses = append(dsStatuses, nname)
 	}
 	return dsStatuses, true, nil
@@ -350,59 +373,59 @@ func (r *NUMAResourcesOperatorReconciler) syncMachineConfigs(ctx context.Context
 	return (updatedCount == len(objStates)), err
 }
 
-func syncMachineConfigPoolsStatuses(instanceName string, trees []nodegroupv1.Tree) ([]nropv1.MachineConfigPool, bool) {
+func syncMachineConfigPoolsStatuses(instanceName string, trees []nodegroupv1.Tree) ([]nropv1.NodeGroupStatus, bool) {
 	klog.V(4).InfoS("Machine Config Status Sync start", "trees", len(trees))
 	defer klog.V(4).Info("Machine Config Status Sync stop")
 
-	mcpStatuses := []nropv1.MachineConfigPool{}
+	statuses := []nropv1.NodeGroupStatus{}
 	for _, tree := range trees {
 		mcp := tree.MachineConfigPool
-		mcpStatuses = append(mcpStatuses, nropv1.MachineConfigPool{Name: mcp.Name})
+		statuses = append(statuses, nropv1.NodeGroupStatus{MachineConfigPoolName: mcp.Name})
 
 		isUpdated := IsMachineConfigPoolUpdated(instanceName, mcp)
 		klog.V(5).InfoS("Machine Config Pool state", "name", mcp.Name, "instance", instanceName, "updated", isUpdated)
 
 		if !isUpdated {
-			return mcpStatuses, false
+			return statuses, false
 		}
 	}
-	return mcpStatuses, true
+	return statuses, true
 }
 
-func syncMachineConfigPoolNodeGroupConfigStatuses(mcpStatuses []nropv1.MachineConfigPool, trees []nodegroupv1.Tree) []nropv1.MachineConfigPool {
-	klog.V(4).InfoS("Machine Config Pool Node Group Status Sync start", "mcpStatuses", len(mcpStatuses), "trees", len(trees))
+func syncMachineConfigPoolNodeGroupConfigStatuses(ngStatuses []nropv1.NodeGroupStatus, trees []nodegroupv1.Tree) []nropv1.NodeGroupStatus {
+	klog.V(4).InfoS("Machine Config Pool Node Group Status Sync start", "mcpStatuses", len(ngStatuses), "trees", len(trees))
 	defer klog.V(4).Info("Machine Config Pool Node Group Status Sync stop")
 
-	updatedMcpStatuses := []nropv1.MachineConfigPool{}
+	updatedNGStatuses := []nropv1.NodeGroupStatus{}
 	for _, tree := range trees {
 		klog.V(5).InfoS("Machine Config Pool Node Group tree update", "mcp", len(tree.MachineConfigPool.Name))
 		mcp := tree.MachineConfigPool
-		mcpStatus := getMachineConfigPoolStatusByName(mcpStatuses, mcp.Name)
+		status := getMachineConfigPoolStatusByName(ngStatuses, mcp.Name)
 
 		var confSource string
 		if tree.NodeGroup != nil && tree.NodeGroup.Config != nil {
 			confSource = "spec"
-			mcpStatus.Config = tree.NodeGroup.Config.DeepCopy()
+			status.Config = tree.NodeGroup.Config.DeepCopy()
 		} else {
 			confSource = "default"
 			ngc := nropv1.DefaultNodeGroupConfig()
-			mcpStatus.Config = &ngc
+			status.Config = &ngc
 		}
 
-		klog.V(6).InfoS("Machine Config Pool Node Group updated status config", "mcp", mcp.Name, "source", confSource, "data", mcpStatus.Config.ToString())
+		klog.V(6).InfoS("Machine Config Pool Node Group updated status config", "mcp", mcp.Name, "source", confSource, "data", status.Config.ToString())
 
-		updatedMcpStatuses = append(updatedMcpStatuses, mcpStatus)
+		updatedNGStatuses = append(updatedNGStatuses, status)
 	}
-	return updatedMcpStatuses
+	return updatedNGStatuses
 }
 
-func getMachineConfigPoolStatusByName(mcpStatuses []nropv1.MachineConfigPool, name string) nropv1.MachineConfigPool {
-	for _, mcpStatus := range mcpStatuses {
-		if mcpStatus.Name == name {
-			return mcpStatus
+func getMachineConfigPoolStatusByName(ngStatuses []nropv1.NodeGroupStatus, name string) nropv1.NodeGroupStatus {
+	for _, status := range ngStatuses {
+		if status.MachineConfigPoolName == name {
+			return status
 		}
 	}
-	return nropv1.MachineConfigPool{Name: name}
+	return nropv1.NodeGroupStatus{MachineConfigPoolName: name}
 }
 
 func (r *NUMAResourcesOperatorReconciler) syncNUMAResourcesOperatorResources(ctx context.Context, instance *nropv1.NUMAResourcesOperator, trees []nodegroupv1.Tree) ([]nropv1.NamespacedName, error) {

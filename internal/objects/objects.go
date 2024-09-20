@@ -170,3 +170,17 @@ func NamespaceLabels() map[string]string {
 		"security.openshift.io/scc.podSecurityLabelSync": "false",
 	}
 }
+
+func CollectNamespacedNameDaemonSets(ngStatuses []nropv1.NodeGroupStatus) []nropv1.NamespacedName {
+	dss := make([]nropv1.NamespacedName, 0, len(ngStatuses))
+	for _, ngStatus := range ngStatuses {
+		if ngStatus.DaemonSet.String() == string(nropv1.Separator) {
+			continue
+		}
+		dss = append(dss, nropv1.NamespacedName{
+			Namespace: ngStatus.DaemonSet.Namespace,
+			Name:      ngStatus.DaemonSet.Name,
+		})
+	}
+	return dss
+}

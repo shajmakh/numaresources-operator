@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	intobjs "github.com/openshift-kni/numaresources-operator/internal/objects"
 	"reflect"
 	"strings"
 	"time"
@@ -143,12 +144,13 @@ var _ = ginkgo.Describe("with a running cluster with all the components", func()
 			nropObj := &nropv1.NUMAResourcesOperator{}
 			err := clients.Client.Get(context.TODO(), client.ObjectKey{Name: objectnames.DefaultNUMAResourcesOperatorCrName}, nropObj)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(nropObj.Status.DaemonSets).ToNot(gomega.BeEmpty())
+
+			gomega.Expect(intobjs.CollectNamespacedNameDaemonSets(nropObj.Status.NodeGroups)).ToNot(gomega.BeEmpty())
 			klog.Infof("NRO %q", nropObj.Name)
 
 			// NROP guarantees all the daemonsets are in the same namespace,
 			// so we pick the first for the sake of brevity
-			namespace := nropObj.Status.DaemonSets[0].Namespace
+			namespace := nropObj.Status.NodeGroups[0].DaemonSet.Namespace
 			klog.Infof("namespace %q", namespace)
 
 			mcpList := &mcov1.MachineConfigPoolList{}
@@ -190,12 +192,12 @@ var _ = ginkgo.Describe("with a running cluster with all the components", func()
 			nropObj := &nropv1.NUMAResourcesOperator{}
 			err := clients.Client.Get(context.TODO(), client.ObjectKey{Name: objectnames.DefaultNUMAResourcesOperatorCrName}, nropObj)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(nropObj.Status.DaemonSets).ToNot(gomega.BeEmpty())
+			gomega.Expect(intobjs.CollectNamespacedNameDaemonSets(nropObj.Status.NodeGroups)).ToNot(gomega.BeEmpty())
 			klog.Infof("NRO %q", nropObj.Name)
 
 			// NROP guarantees all the daemonsets are in the same namespace,
 			// so we pick the first for the sake of brevity
-			namespace := nropObj.Status.DaemonSets[0].Namespace
+			namespace := nropObj.Status.NodeGroups[0].DaemonSet.Namespace
 			klog.Infof("namespace %q", namespace)
 
 			mcpList := &mcov1.MachineConfigPoolList{}

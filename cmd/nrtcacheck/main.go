@@ -206,7 +206,9 @@ func findRTEPodsByNodeName(ctx context.Context, cli client.Client) (map[string]t
 	}
 
 	podsByName := make(map[string]types.NamespacedName)
-	for _, ds := range nroObj.Status.DaemonSets {
+	// don't assume all ds statuses are healthy so collected the non empty ones
+	dss := collectNamespacedNameDaemonSets(nroObj.Status.NodeGroups)
+	for _, ds := range dss {
 		dsObj := appsv1.DaemonSet{}
 		err = cli.Get(context.TODO(), types.NamespacedName{Namespace: ds.Namespace, Name: ds.Name}, &dsObj)
 		if err != nil {
@@ -265,4 +267,18 @@ func getKlogLevel() int {
 		}
 	}
 	return 0
+}
+
+func collectNamespacedNameDaemonSets(ngStatuses []nropv1.NodeGroupStatus) []nropv1.NamespacedName {
+	dss := make([]nropv1.NamespacedName, 0, len(ngStatuses))
+	for _, ngStatus := range ngStatuses {
+		if ngStatus.DaemonSet.String() == string(nropv1.Separator) {
+			continue
+		}
+		dss = append(dss, nropv1.NamespacedName{
+			Namespace: ngStatus.DaemonSet.Namespace,
+			Name:      ngStatus.DaemonSet.Name,
+		})
+	}
+	return dss
 }

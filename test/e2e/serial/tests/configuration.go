@@ -675,14 +675,14 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 				if err != nil {
 					return false, fmt.Errorf("cannot get %q in the cluster: %w", nroKey.String(), err)
 				}
-				if len(nroOperObj.Status.MachineConfigPools) != len(nroOperObj.Spec.NodeGroups) {
-					return false, fmt.Errorf("MCP Status mismatch: found %d, expected %d",
-						len(nroOperObj.Status.MachineConfigPools), len(nroOperObj.Spec.NodeGroups),
+				if len(nroOperObj.Status.NodeGroups) != len(nroOperObj.Spec.NodeGroups) {
+					return false, fmt.Errorf("NodeGroups Spec vs Status mismatch: found %d, expected %d",
+						len(nroOperObj.Status.NodeGroups), len(nroOperObj.Spec.NodeGroups),
 					)
 				}
 				klog.Infof("fetched NRO Object %q", nroKey.String())
 
-				statusConf := nroOperObj.Status.MachineConfigPools[0].Config // shortcut
+				statusConf := nroOperObj.Status.NodeGroups[0].Config // shortcut
 				if statusConf == nil {
 					// is this a transient error or does the cluster not support the Config reporting?
 					return false, nil
@@ -729,13 +729,14 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 			dss, err := objects.GetDaemonSetsOwnedBy(fxt.Client, nroOperObj.ObjectMeta)
 			Expect(err).ToNot(HaveOccurred())
 
-			dssExpected := namespacedNameListToStringList(nroOperObj.Status.DaemonSets)
+			dssFromStatus := intobjs.CollectNamespacedNameDaemonSets(nroOperObj.Status.NodeGroups)
+			dssExpected := namespacedNameListToStringList(dssFromStatus)
 			dssGot := namespacedNameListToStringList(daemonSetListToNamespacedNameList(dss))
 			Expect(dssGot).To(Equal(dssExpected), "mismatching RTE DaemonSets for NUMAResourcesOperator")
 
 			By("checking the relatedObjects for NROP")
 			// shortcut, they all must be here anyway
-			nroExpected := objRefListToStringList(relatedobjects.ResourceTopologyExporter(dss[0].Namespace, nroOperObj.Status.DaemonSets))
+			nroExpected := objRefListToStringList(relatedobjects.ResourceTopologyExporter(dss[0].Namespace, dssFromStatus))
 			nroGot := objRefListToStringList(nroOperObj.Status.RelatedObjects)
 			Expect(nroGot).To(Equal(nroExpected), "mismatching related objects for NUMAResourcesOperator")
 

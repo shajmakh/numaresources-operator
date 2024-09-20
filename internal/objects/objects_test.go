@@ -93,3 +93,7 @@ func TestNewNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectNamespacedNameDaemonSets(t *testing.T) {
+	//TODO
+}

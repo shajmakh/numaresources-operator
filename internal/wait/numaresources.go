@@ -58,11 +58,19 @@ func (wt Waiter) ForDaemonsetInNUMAResourcesOperatorStatus(ctx context.Context, 
 			return false, err
 		}
 
-		if len(updatedNRO.Status.DaemonSets) == 0 {
-			klog.Warningf("failed to get the DaemonSet from NUMAResourcesOperator %s", key.String())
+		if len(updatedNRO.Status.NodeGroups) == 0 {
+			klog.Warningf("failed to get the NodeGroups statuses from NUMAResourcesOperator %s", key.String())
 			return false, nil
 		}
-		klog.Infof("Daemonset info %s/%s ready in NUMAResourcesOperator %s", updatedNRO.Status.DaemonSets[0].Namespace, updatedNRO.Status.DaemonSets[0].Name, key.String())
+
+		for _, ng := range updatedNRO.Status.NodeGroups {
+			if &ng.DaemonSet == nil {
+				klog.Warningf("node group %q still doesn't report its daemonset", ng.MachineConfigPoolName)
+				return false, nil
+			}
+		}
+
+		klog.Infof("Daemonsets info is ready in NUMAResourcesOperator %s", key.String())
 		return true, nil
 	})
 	return &updatedNRO, err

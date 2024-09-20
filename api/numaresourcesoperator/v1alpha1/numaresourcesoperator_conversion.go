@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+	"github.com/openshift-kni/numaresources-operator/pkg/objectnames"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
@@ -74,20 +76,31 @@ func (src *NUMAResourcesOperator) ConvertToV1Rote(dst *nropv1.NUMAResourcesOpera
 	}
 	// Status
 	if src.Status.DaemonSets != nil {
-		dst.Status.DaemonSets = make([]nropv1.NamespacedName, 0, len(src.Status.DaemonSets))
-		for idx := range src.Status.DaemonSets {
-			dst.Status.DaemonSets = append(dst.Status.DaemonSets, nropv1.NamespacedName{
-				Namespace: src.Status.DaemonSets[idx].Namespace,
-				Name:      src.Status.DaemonSets[idx].Name,
-			})
+		for _, ds := range src.Status.DaemonSets {
+			ngDetected := false
+			for _, ngStatus := range dst.Status.NodeGroups {
+				if ngStatus.MachineConfigPoolName == objectnames.GetAssociatedNameFromRTEDaemonset(ds.Name, dst.Name) {
+					ngStatus.DaemonSet = nropv1.NamespacedName{
+						Namespace: ds.Namespace,
+						Name:      ds.Name,
+					}
+
+					ngDetected = true
+				}
+			}
+
+			if !ngDetected {
+				return fmt.Errorf("could not detect node group matching daemonset %s", ds.Name)
+			}
 		}
 	}
 	if src.Status.MachineConfigPools != nil {
-		dst.Status.MachineConfigPools = make([]nropv1.MachineConfigPool, 0, len(src.Status.MachineConfigPools))
+		dst.Status.NodeGroups = make([]nropv1.NodeGroupStatus, 0, len(src.Status.MachineConfigPools))
 		for idx := range src.Status.MachineConfigPools {
-			dst.Status.MachineConfigPools = append(dst.Status.MachineConfigPools, convertMachineConfigPoolV1Alpha1ToV1(src.Status.MachineConfigPools[idx]))
+			dst.Status.NodeGroups = append(dst.Status.NodeGroups, nropv1.NodeGroupStatus{MachineConfigPoolName: src.Status.MachineConfigPools[idx].Name})
 		}
 	}
+
 	if src.Status.Conditions != nil {
 		dst.Status.Conditions = make([]metav1.Condition, len(src.Status.Conditions))
 		copy(dst.Status.Conditions, src.Status.Conditions)
@@ -120,44 +133,30 @@ func (dst *NUMAResourcesOperator) ConvertFromV1Rote(src *nropv1.NUMAResourcesOpe
 			dst.Spec.PodExcludes[idx].Name = src.Spec.PodExcludes[idx].Name
 		}
 	}
+
 	// Status
-	if src.Status.DaemonSets != nil {
-		dst.Status.DaemonSets = make([]NamespacedName, len(src.Status.DaemonSets))
-		for idx := range src.Spec.PodExcludes {
-			dst.Spec.PodExcludes[idx].Namespace = src.Spec.PodExcludes[idx].Namespace
-			dst.Spec.PodExcludes[idx].Name = src.Spec.PodExcludes[idx].Name
-		}
-	}
-	if src.Status.MachineConfigPools != nil {
-		dst.Status.MachineConfigPools = make([]MachineConfigPool, 0, len(src.Status.MachineConfigPools))
-		for idx := range src.Status.MachineConfigPools {
-			dst.Status.MachineConfigPools = append(dst.Status.MachineConfigPools, convertMachineConfigPoolV1ToV1Alpha1(src.Status.MachineConfigPools[idx]))
-		}
-	}
 	if src.Status.Conditions != nil {
 		dst.Status.Conditions = make([]metav1.Condition, len(src.Status.Conditions))
 		copy(dst.Status.Conditions, src.Status.Conditions)
 	}
 
+	if src.Status.NodeGroups != nil {
+		dst.Status.DaemonSets = make([]NamespacedName, len(src.Status.NodeGroups))
+		dst.Status.MachineConfigPools = make([]MachineConfigPool, len(src.Status.NodeGroups))
+
+		for _, ng := range src.Status.NodeGroups {
+			dst.Status.DaemonSets = append(dst.Status.DaemonSets, NamespacedName{
+				Namespace: ng.DaemonSet.Namespace,
+				Name:      ng.DaemonSet.Name,
+			})
+			dst.Status.MachineConfigPools = append(dst.Status.MachineConfigPools, MachineConfigPool{
+				Name:   ng.MachineConfigPoolName,
+				Config: convertNodeGroupConfigV1ToV1Alpha1(*ng.Config),
+				//MCP conditions are no longer needed in v1
+			})
+		}
+	}
 	return nil
-}
-
-func convertMachineConfigPoolV1Alpha1ToV1(src MachineConfigPool) nropv1.MachineConfigPool {
-	dst := nropv1.MachineConfigPool{}
-	dst.Name = src.Name
-	if src.Config != nil {
-		dst.Config = convertNodeGroupConfigV1Alpha1ToV1(*src.Config)
-	}
-	return dst
-}
-
-func convertMachineConfigPoolV1ToV1Alpha1(src nropv1.MachineConfigPool) MachineConfigPool {
-	dst := MachineConfigPool{}
-	dst.Name = src.Name
-	if src.Config != nil {
-		dst.Config = convertNodeGroupConfigV1ToV1Alpha1(*src.Config)
-	}
-	return dst
 }
 
 func convertNodeGroupConfigV1Alpha1ToV1(src NodeGroupConfig) *nropv1.NodeGroupConfig {

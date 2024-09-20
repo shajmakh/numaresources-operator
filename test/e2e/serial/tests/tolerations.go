@@ -99,8 +99,8 @@ var _ = Describe("[serial][disruptive][rtetols] numaresources RTE tolerations su
 
 			By("checking the DSs owned by NROP")
 			dsKey = wait.ObjectKey{
-				Namespace: nroOperObj.Status.DaemonSets[0].Namespace,
-				Name:      nroOperObj.Status.DaemonSets[0].Name,
+				Namespace: nroOperObj.Status.NodeGroups[0].DaemonSet.Namespace,
+				Name:      nroOperObj.Status.NodeGroups[0].DaemonSet.Name,
 			}
 			err = fxt.Client.Get(ctx, client.ObjectKey{Namespace: dsKey.Namespace, Name: dsKey.Name}, &dsObj)
 			Expect(err).ToNot(HaveOccurred(), "cannot get %q in the cluster", dsKey.String())

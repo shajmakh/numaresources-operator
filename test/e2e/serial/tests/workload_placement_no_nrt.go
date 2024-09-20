@@ -202,8 +202,8 @@ func updateInfoRefreshPause(fxt *e2efixture.Fixture, newVal nropv1.InfoRefreshPa
 	}).WithTimeout(2*time.Minute).WithPolling(9*time.Second).Should(Equal(true), "Status of NROP failed to get updated")
 
 	dsKey := wait.ObjectKey{
-		Namespace: updatedObj.Status.DaemonSets[0].Namespace,
-		Name:      updatedObj.Status.DaemonSets[0].Name,
+		Namespace: updatedObj.Status.NodeGroups[0].DaemonSet.Namespace,
+		Name:      updatedObj.Status.NodeGroups[0].DaemonSet.Name,
 	}
 	klog.Info("waiting for DaemonSet to be ready")
 	_, err = wait.With(e2eclient.Client).Interval(10*time.Second).Timeout(1*time.Minute).ForDaemonSetUpdateByKey(context.TODO(), dsKey)

@@ -97,14 +97,14 @@ var _ = Describe("[serial][scheduler][cache][tier0] scheduler cache", Serial, La
 			err := fxt.Client.Get(context.TODO(), nroKey, &nroOperObj)
 			Expect(err).ToNot(HaveOccurred(), "cannot get %q in the cluster", nroKey.String())
 
-			if len(nroOperObj.Status.MachineConfigPools) != 1 {
+			if len(nroOperObj.Status.NodeGroups) != 1 {
 				// TODO: this is the simplest case, there is no hard requirement really
 				// but wr took the simplest option atm
-				e2efixture.Skipf(fxt, "more than one MCP not yet supported, found %d", len(nroOperObj.Status.MachineConfigPools))
+				e2efixture.Skipf(fxt, "more than one MCP not yet supported, found %d", len(nroOperObj.Status.NodeGroups))
 			}
 
-			mcpName = nroOperObj.Status.MachineConfigPools[0].Name
-			conf := nroOperObj.Status.MachineConfigPools[0].Config
+			mcpName = nroOperObj.Status.NodeGroups[0].MachineConfigPoolName
+			conf := nroOperObj.Status.NodeGroups[0].Config
 			if ok, val := isPFPEnabledInConfig(conf); !ok {
 				e2efixture.Skipf(fxt, "unsupported fingerprint status %q in %q", val, mcpName)
 			}

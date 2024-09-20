@@ -18,7 +18,6 @@ package v1
 
 import (
 	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -120,30 +119,30 @@ type NodeGroup struct {
 	Config *NodeGroupConfig `json:"config,omitempty"`
 }
 
+// NodeGroupStatus defines the status of a single node group
+type NodeGroupStatus struct {
+	// DaemonSet of the configured RTE for this node group
+	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="RTE DaemonSet"
+	DaemonSet NamespacedName `json:"daemonsets,omitempty"`
+	// NodeGroupConfig represents the latest available configuration applied to this NodeGroup
+	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Optional configuration enforced on this NodeGroup"
+	Config *NodeGroupConfig `json:"config,omitempty"`
+	// MachineConfigPoolName matches the name of the MCP derived from the MCP selector
+	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Matching MCP name for this node group"
+	MachineConfigPoolName string `json:"machineConfigPoolName"`
+}
+
 // NUMAResourcesOperatorStatus defines the observed state of NUMAResourcesOperator
 type NUMAResourcesOperatorStatus struct {
-	// DaemonSets of the configured RTEs, one per node group
-	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="RTE DaemonSets"
-	DaemonSets []NamespacedName `json:"daemonsets,omitempty"`
-	// MachineConfigPools resolved from configured node groups
-	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="RTE MCPs from node groups"
-	MachineConfigPools []MachineConfigPool `json:"machineconfigpools,omitempty"`
-	// Conditions show the current state of the NUMAResourcesOperator Operator
+	// NodeGroups report the observed status of the configured NodeGroups, matching by their name
+	// +optional
+	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Node groups observed status"
+	NodeGroups []NodeGroupStatus `json:"nodeGroups,omitempty"` // Conditions show the current state of the NUMAResourcesOperator Operator
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Condition reported"
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// RelatedObjects list of objects of interest for this operator
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Related Objects"
 	RelatedObjects []configv1.ObjectReference `json:"relatedObjects,omitempty"`
-}
-
-// MachineConfigPool defines the observed state of each MachineConfigPool selected by node groups
-type MachineConfigPool struct {
-	// Name the name of the machine config pool
-	Name string `json:"name"`
-	// NodeGroupConfig represents the latest available configuration applied to this MachineConfigPool
-	// +optional
-	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Optional configuration enforced on this NodeGroup"
-	Config *NodeGroupConfig `json:"config,omitempty"`
 }
 
 //+genclient
