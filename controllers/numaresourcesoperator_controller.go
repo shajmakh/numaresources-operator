@@ -148,6 +148,8 @@ func (r *NUMAResourcesOperatorReconciler) Reconcile(ctx context.Context, req ctr
 	for idx := range trees {
 		conf := trees[idx].NodeGroup.NormalizeConfig()
 		trees[idx].NodeGroup.Config = &conf
+		name := trees[idx].NodeGroup.NormalizeName()
+		trees[idx].NodeGroup.Name = &name
 	}
 
 	result, condition, err := r.reconcileResource(ctx, instance, trees)
@@ -358,7 +360,7 @@ func syncMachineConfigPoolsStatuses(instanceName string, trees []nodegroupv1.Tre
 	mcpStatuses := []nropv1.MachineConfigPool{}
 	for _, tree := range trees {
 		for _, mcp := range tree.MachineConfigPools {
-			mcpStatuses = append(mcpStatuses, extractMCPStatus(mcp, forwardMCPConds))
+			mcpStatuses = append(mcpStatuses, extractMCPStatus(mcp, *tree.NodeGroup.Name, forwardMCPConds))
 
 			isUpdated := IsMachineConfigPoolUpdated(instanceName, mcp)
 			klog.V(5).InfoS("Machine Config Pool state", "name", mcp.Name, "instance", instanceName, "updated", isUpdated)
@@ -371,9 +373,10 @@ func syncMachineConfigPoolsStatuses(instanceName string, trees []nodegroupv1.Tre
 	return mcpStatuses, true
 }
 
-func extractMCPStatus(mcp *machineconfigv1.MachineConfigPool, forwardMCPConds bool) nropv1.MachineConfigPool {
+func extractMCPStatus(mcp *machineconfigv1.MachineConfigPool, ngName string, forwardMCPConds bool) nropv1.MachineConfigPool {
 	mcpStatus := nropv1.MachineConfigPool{
-		Name: mcp.Name,
+		Name:          mcp.Name,
+		NodeGroupName: ngName,
 	}
 	if !forwardMCPConds {
 		return mcpStatus

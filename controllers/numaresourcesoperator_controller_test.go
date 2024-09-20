@@ -129,6 +129,36 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 		})
 	})
 
+	Context("with duplicated node group names", func() {
+		It("should updated the CR condition to degraded", func() {
+			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{
+				{
+					MatchLabels: map[string]string{"test1": "test1"},
+				},
+				{
+					MatchLabels: map[string]string{"test2": "test2"},
+				},
+			})
+			name := "ng-test"
+			nro.Spec.NodeGroups[0].Name = &name
+			nro.Spec.NodeGroups[1].Name = &name
+			verifyDegradedCondition(nro, validation.NodeGroupsError)
+		})
+	})
+
+	Context("with invalid node group name", func() {
+		It("should updated the CR condition to degraded", func() {
+			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{
+				{
+					MatchLabels: map[string]string{"test1": "test1"},
+				},
+			})
+			name := "ng test" //spaces aren't allowed
+			nro.Spec.NodeGroups[0].Name = &name
+			verifyDegradedCondition(nro, validation.NodeGroupsError)
+		})
+	})
+
 	Context("with correct NRO and more than one NodeGroup", func() {
 		var nro *nropv1.NUMAResourcesOperator
 		var mcp1 *machineconfigv1.MachineConfigPool
@@ -300,6 +330,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 		})
 	})
 	Context("with correct NRO CR", func() {
+		nodeGroupCustomName := "custom-node-group"
 		var nro *nropv1.NUMAResourcesOperator
 		var mcp1 *machineconfigv1.MachineConfigPool
 		var mcp2 *machineconfigv1.MachineConfigPool
@@ -319,6 +350,8 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				{MatchLabels: label1},
 				{MatchLabels: label2},
 			})
+
+			nro.Spec.NodeGroups[0].Name = &nodeGroupCustomName
 
 			mcp1 = testobjs.NewMachineConfigPool("test1", label1, &metav1.LabelSelector{MatchLabels: label1}, &metav1.LabelSelector{MatchLabels: label1})
 			mcp2 = testobjs.NewMachineConfigPool("test2", label2, &metav1.LabelSelector{MatchLabels: label2}, &metav1.LabelSelector{MatchLabels: label2})
@@ -384,6 +417,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 						Expect(reconciler.Client.Get(context.TODO(), key, nro)).ToNot(HaveOccurred())
 						Expect(len(nro.Status.MachineConfigPools)).To(Equal(1))
 						Expect(nro.Status.MachineConfigPools[0].Name).To(Equal("test1"))
+						Expect(nro.Status.MachineConfigPools[0].NodeGroupName).To(Equal(nodeGroupCustomName))
 					})
 				})
 
@@ -471,6 +505,11 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 							Namespace: testNamespace,
 						}
 						Expect(reconciler.Client.Get(context.TODO(), mcp2DSKey, ds)).ToNot(HaveOccurred())
+
+						key := client.ObjectKeyFromObject(nro)
+						Expect(reconciler.Client.Get(context.TODO(), key, nro)).ToNot(HaveOccurred())
+						Expect(nro.Status.MachineConfigPools[1].NodeGroupName).ToNot(Equal(nodeGroupCustomName))
+						Expect(nro.Status.MachineConfigPools[1].NodeGroupName).ToNot(BeEmpty())
 					})
 					When(" daemonsets are ready", func() {
 						var dsDesiredNumberScheduled int32

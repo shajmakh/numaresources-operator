@@ -17,9 +17,12 @@
 package v1
 
 import (
+	"crypto/md5"
+	"fmt"
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (nodeGroup NodeGroup) NormalizeConfig() NodeGroupConfig {
@@ -31,6 +34,18 @@ func (nodeGroup NodeGroup) NormalizeConfig() NodeGroupConfig {
 	// always pass through tolerations
 	conf.Tolerations = CloneTolerations(nodeGroup.Config.Tolerations)
 	return conf.Merge(*nodeGroup.Config)
+}
+
+func (nodeGroup NodeGroup) NormalizeName() string {
+	// generate name if not provided
+	if nodeGroup.Name != nil {
+		return *nodeGroup.Name
+	}
+
+	// nil selector should never be the case
+	nameInByte := []byte(metav1.FormatLabelSelector(nodeGroup.MachineConfigPoolSelector))
+	// use md5 to retain same name for the same selector
+	return fmt.Sprintf("%x", md5.Sum(nameInByte))
 }
 
 func (current NodeGroupConfig) Merge(updated NodeGroupConfig) NodeGroupConfig {

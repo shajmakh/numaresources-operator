@@ -83,6 +83,13 @@ func TestMachineConfigPoolDuplicates(t *testing.T) {
 }
 
 func TestNodeGroupsSanity(t *testing.T) {
+	var (
+		valid            = "mcp-test"
+		invalidWithSpace = "mcp test"
+		invalidEmpty1    = "  \t  "
+		invalidEmpty2    = ""
+	)
+
 	type testCase struct {
 		name                 string
 		nodeGroups           []nropv1.NodeGroup
@@ -162,6 +169,64 @@ func TestNodeGroupsSanity(t *testing.T) {
 					MachineConfigPoolSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"test1": "test1",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "invalid node group name",
+			nodeGroups: []nropv1.NodeGroup{
+				{
+					Name: &invalidWithSpace,
+					MachineConfigPoolSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "test",
+						},
+					},
+				},
+			},
+			expectedError:        true,
+			expectedErrorMessage: "node group name should not contain spaces or be empty",
+		},
+		{
+			name: "node group name all spaces",
+			nodeGroups: []nropv1.NodeGroup{
+				{
+					Name: &invalidEmpty1,
+					MachineConfigPoolSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "test",
+						},
+					},
+				},
+			},
+			expectedError:        true,
+			expectedErrorMessage: "node group name should not contain spaces",
+		},
+		{
+			name: "node group name as empty string",
+			nodeGroups: []nropv1.NodeGroup{
+				{
+					Name: &invalidEmpty2,
+					MachineConfigPoolSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "test",
+						},
+					},
+				},
+			},
+			expectedError:        true,
+			expectedErrorMessage: "node group name should not contain spaces or be empty",
+		},
+		{
+			name: "valid node group name",
+			nodeGroups: []nropv1.NodeGroup{
+				{
+					Name: &valid,
+					MachineConfigPoolSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"test": "test",
 						},
 					},
 				},

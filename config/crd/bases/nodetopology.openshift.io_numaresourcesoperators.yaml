@@ -182,6 +182,11 @@ spec:
                           type: object
                       type: object
                       x-kubernetes-map-type: atomic
+                    name:
+                      description: |-
+                        Name is the name used to identify this node group. Has to be unique among node groups.
+                        If not provided, is determined by the system.
+                      type: string
                   type: object
                 type: array
               podExcludes:
@@ -396,6 +401,10 @@ spec:
                       type: object
                     name:
                       description: Name the name of the machine config pool
+                      type: string
+                    nodeGroupName:
+                      description: NodeGroupName the name of the node group this MCP
+                        belongs to
                       type: string
                   required:
                   - name

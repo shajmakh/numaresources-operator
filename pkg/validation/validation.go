@@ -70,6 +70,14 @@ func NodeGroups(nodeGroups []nropv1.NodeGroup) error {
 		return err
 	}
 
+	if err := nodeGroupsNames(nodeGroups); err != nil {
+		return err
+	}
+
+	if err := nodeGroupNamesDuplicates(nodeGroups); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -110,6 +118,52 @@ func nodeGroupsDuplicates(nodeGroups []nropv1.NodeGroup) error {
 		return fmt.Errorf(strings.Join(duplicateErrors, "; "))
 	}
 
+	return nil
+}
+
+// TODO: move it under the validation webhook once we will have one
+func nodeGroupNamesDuplicates(nodeGroups []nropv1.NodeGroup) error {
+	duplicates := map[string]int{}
+	for _, nodeGroup := range nodeGroups {
+		if nodeGroup.Name == nil {
+			continue
+		}
+
+		key := *nodeGroup.Name
+		if _, ok := duplicates[key]; !ok {
+			duplicates[key] = 0
+		}
+		duplicates[key] += 1
+	}
+
+	var duplicateErrors []string
+	for name, count := range duplicates {
+		if count > 1 {
+			duplicateErrors = append(duplicateErrors, fmt.Sprintf("multiple node groups with same name %q", name))
+		}
+	}
+
+	if len(duplicateErrors) > 0 {
+		return fmt.Errorf(strings.Join(duplicateErrors, "; "))
+	}
+
+	return nil
+}
+
+// TODO: move it under the validation webhook once we will have one
+func nodeGroupsNames(nodeGroups []nropv1.NodeGroup) error {
+	for _, nodeGroup := range nodeGroups {
+		if nodeGroup.Name == nil {
+			continue
+		}
+
+		trimmed := strings.TrimSpace(*nodeGroup.Name)
+		trimmed = strings.Replace(trimmed, " ", "", -1)
+
+		if trimmed != *nodeGroup.Name || trimmed == "" {
+			return fmt.Errorf("node group name should not contain spaces or be empty: %s", *nodeGroup.Name)
+		}
+	}
 	return nil
 }
 

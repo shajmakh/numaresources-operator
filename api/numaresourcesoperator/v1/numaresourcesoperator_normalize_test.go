@@ -17,6 +17,8 @@
 package v1
 
 import (
+	"crypto/md5"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -284,4 +286,29 @@ func TestSortedTolerations(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNodeGroupNormalizeName(t *testing.T) {
+	name := "mcp-test"
+	ng := NodeGroup{
+		Name: &name,
+		MachineConfigPoolSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"test": "test",
+			},
+		},
+	}
+
+	got := ng.NormalizeName()
+	if got != name {
+		t.Errorf("unexpected normalized name:\ngot=%+v\nexpected=%+v", got, name)
+	}
+	ng.Name = nil
+	got = ng.NormalizeName()
+	nameInByte := []byte(metav1.FormatLabelSelector(ng.MachineConfigPoolSelector))
+	expected := fmt.Sprintf("%x", md5.Sum(nameInByte))
+	if got != expected {
+		t.Errorf("unexpected normalized name:\ngot=%+v\nexpected=%+v", got, expected)
+	}
+
 }

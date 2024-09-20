@@ -114,6 +114,10 @@ type NodeGroupConfig struct {
 // NodeGroup defines group of nodes that will run resource topology exporter daemon set
 // You can choose the group of node by MachineConfigPoolSelector or by NodeSelector
 type NodeGroup struct {
+	// Name is the name used to identify this node group. Has to be unique among node groups.
+	// If not provided, is determined by the system.
+	// +optional
+	Name *string `json:"name,omitempty"`
 	// MachineConfigPoolSelector defines label selector for the machine config pool
 	// +optional
 	MachineConfigPoolSelector *metav1.LabelSelector `json:"machineConfigPoolSelector,omitempty"`
@@ -150,6 +154,9 @@ type MachineConfigPool struct {
 	// +optional
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="Optional configuration enforced on this NodeGroup"
 	Config *NodeGroupConfig `json:"config,omitempty"`
+	// NodeGroupName the name of the node group this MCP belongs to
+	// +optional
+	NodeGroupName string `json:"nodeGroupName,omitempty"`
 }
 
 //+genclient
