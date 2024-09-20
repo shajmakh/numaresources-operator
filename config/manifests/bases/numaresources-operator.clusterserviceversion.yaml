@@ -26,9 +26,8 @@ spec:
         path: imageSpec
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: |-
-          Valid values are: "Normal", "Debug", "Trace", "TraceAll".
-          Defaults to "Normal".
+      - description: 'Valid values are: "Normal", "Debug", "Trace", "TraceAll". Defaults
+          to "Normal".'
         displayName: RTE log verbosity
         path: logLevel
       - description: Group of Nodes to enable RTE on
@@ -58,8 +57,8 @@ spec:
         path: nodeGroups[0].config.podsFingerprinting
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: |-
-          Tolerations overrides tolerations to be set into RTE daemonsets for this NodeGroup. If not empty, the tolerations will be the one set here.
+      - description: Tolerations overrides tolerations to be set into RTE daemonsets
+          for this NodeGroup. If not empty, the tolerations will be the one set here.
           Leave empty to make the system use the default tolerations.
         displayName: Extra tolerations for the topology updater daemonset
         path: nodeGroups[0].config.tolerations
@@ -70,24 +69,23 @@ spec:
         displayName: Optional ignore pod namespace/name glob patterns
         path: podExcludes
       statusDescriptors:
-      - description: Conditions show the current state of the NUMAResourcesOperator
-          Operator
-        displayName: Condition reported
+      - displayName: Condition reported
         path: conditions
-      - description: DaemonSets of the configured RTEs, one per node group
-        displayName: RTE DaemonSets
-        path: daemonsets
-      - description: MachineConfigPools resolved from configured node groups
-        displayName: RTE MCPs from node groups
-        path: machineconfigpools
-      - description: Conditions represents the latest available observations of MachineConfigPool
-          current state.
-        displayName: Optional conditions reported for this NodeGroup
-        path: machineconfigpools[0].conditions
+      - description: NodeGroups report the observed status of the configured NodeGroups,
+          matching by their name
+        displayName: Node groups observed status
+        path: nodeGroups
       - description: NodeGroupConfig represents the latest available configuration
-          applied to this MachineConfigPool
+          applied to this NodeGroup
         displayName: Optional configuration enforced on this NodeGroup
-        path: machineconfigpools[0].config
+        path: nodeGroups[0].config
+      - description: DaemonSet of the configured RTE for this node group
+        displayName: RTE DaemonSet
+        path: nodeGroups[0].daemonsets
+      - description: MachineConfigPoolName matches the name of the MCP derived from
+          the MCP selector
+        displayName: Matching MCP name for this node group
+        path: nodeGroups[0].machineConfigPoolName
       - description: RelatedObjects list of objects of interest for this operator
         displayName: Related Objects
         path: relatedObjects
@@ -107,9 +105,8 @@ spec:
         path: imageSpec
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: |-
-          Valid values are: "Normal", "Debug", "Trace", "TraceAll".
-          Defaults to "Normal".
+      - description: 'Valid values are: "Normal", "Debug", "Trace", "TraceAll". Defaults
+          to "Normal".'
         displayName: RTE log verbosity
         path: logLevel
       - description: Group of Nodes to enable RTE on
@@ -188,9 +185,8 @@ spec:
         path: imageSpec
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: |-
-          Valid values are: "Normal", "Debug", "Trace", "TraceAll".
-          Defaults to "Normal".
+      - description: 'Valid values are: "Normal", "Debug", "Trace", "TraceAll". Defaults
+          to "Normal".'
         displayName: Scheduler log verbosity
         path: logLevel
       - description: Replicas control how many scheduler pods must be configured for
@@ -250,9 +246,8 @@ spec:
         path: imageSpec
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: |-
-          Valid values are: "Normal", "Debug", "Trace", "TraceAll".
-          Defaults to "Normal".
+      - description: 'Valid values are: "Normal", "Debug", "Trace", "TraceAll". Defaults
+          to "Normal".'
         displayName: Scheduler log verbosity
         path: logLevel
       - description: Scheduler name to be used in pod templates
