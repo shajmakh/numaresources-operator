@@ -251,3 +251,107 @@ func TestNodeGroupsSanity(t *testing.T) {
 		})
 	}
 }
+
+func TestEqualNamespacedDSSlicesByName(t *testing.T) {
+	type testCase struct {
+		name          string
+		s1            []nropv1.NamespacedName
+		s2            []nropv1.NamespacedName
+		expectedError bool
+	}
+
+	testCases := []testCase{
+		{
+			name:          "nil slices",
+			s1:            []nropv1.NamespacedName{},
+			s2:            []nropv1.NamespacedName{},
+			expectedError: false,
+		},
+		{
+			name: "equal slices by name",
+			s1: []nropv1.NamespacedName{
+				{
+					Name: "foo",
+				},
+				{
+					Namespace: "ns1",
+					Name:      "bar",
+				},
+			},
+			s2: []nropv1.NamespacedName{
+				{
+					Name: "bar",
+				},
+				{
+					Namespace: "ns2",
+					Name:      "foo",
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "different slices by length",
+			s1: []nropv1.NamespacedName{
+				{
+					Namespace: "ns1",
+					Name:      "foo",
+				},
+				{
+					Namespace: "ns1",
+					Name:      "bar",
+				},
+			},
+			s2: []nropv1.NamespacedName{
+				{
+					Namespace: "ns2",
+					Name:      "bar",
+				},
+				{
+					Namespace: "ns2",
+					Name:      "foo",
+				},
+				{
+					Namespace: "ns2",
+					Name:      "foo",
+				},
+			},
+			expectedError: true,
+		},
+		{
+			name: "different slices by name",
+			s1: []nropv1.NamespacedName{
+				{
+					Namespace: "ns1",
+					Name:      "foo",
+				},
+				{
+					Namespace: "ns1",
+					Name:      "bar",
+				},
+			},
+			s2: []nropv1.NamespacedName{
+				{
+					Namespace: "ns1",
+					Name:      "foo",
+				},
+				{
+					Namespace: "ns1",
+					Name:      "foo",
+				},
+			},
+			expectedError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := EqualNamespacedDSSlicesByName(tc.s1, tc.s2)
+			if err == nil && tc.expectedError {
+				t.Errorf("expected error, succeeded")
+			}
+			if err != nil && !tc.expectedError {
+				t.Errorf("expected success, failed")
+			}
+		})
+	}
+}

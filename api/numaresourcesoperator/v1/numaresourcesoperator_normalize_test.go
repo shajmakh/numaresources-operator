@@ -310,5 +310,4 @@ func TestNodeGroupNormalizeName(t *testing.T) {
 	if got != expected {
 		t.Errorf("unexpected normalized name:\ngot=%+v\nexpected=%+v", got, expected)
 	}
-
 }

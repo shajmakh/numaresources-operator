@@ -46,13 +46,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
+	testobjs "github.com/openshift-kni/numaresources-operator/internal/objects"
 	"github.com/openshift-kni/numaresources-operator/pkg/images"
 	"github.com/openshift-kni/numaresources-operator/pkg/objectnames"
 	"github.com/openshift-kni/numaresources-operator/pkg/objectstate/rte"
 	"github.com/openshift-kni/numaresources-operator/pkg/status"
 	"github.com/openshift-kni/numaresources-operator/pkg/validation"
-
-	testobjs "github.com/openshift-kni/numaresources-operator/internal/objects"
 )
 
 const (
@@ -536,7 +535,6 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 							Expect(err).ToNot(HaveOccurred())
 						})
 						It(" operator status should report RelatedObjects as expected", func() {
-
 							By("Getting updated NROP Status")
 							key := client.ObjectKeyFromObject(nro)
 							nroUpdated := &nropv1.NUMAResourcesOperator{}
@@ -573,6 +571,8 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 
 							Expect(len(nroUpdated.Status.RelatedObjects)).To(Equal(len(expected)))
 							Expect(nroUpdated.Status.RelatedObjects).To(ContainElements(expected))
+
+							Expect(validation.EqualNamespacedDSSlicesByName(nroUpdated.Status.DaemonSets, testobjs.GetDaemonSetListFromNodeGroupStatuses(nroUpdated.Status.NodeGroups)))
 						})
 					})
 				})

@@ -268,11 +268,53 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResource(ctx context.Context,
 		}
 	}
 
+	instance.Status.NodeGroups = syncNodeGroupsStatusesNamesAndConfig(instance)
+
 	if done, res, cond, err := r.reconcileResourceDaemonSet(ctx, instance, trees); done {
 		return res, cond, err
 	}
 
+	instance.Status.NodeGroups = syncNodeGroupsStatusesDaemonSets(instance)
+
 	return ctrl.Result{}, status.ConditionAvailable, nil
+}
+
+func syncNodeGroupsStatusesNamesAndConfig(instance *nropv1.NUMAResourcesOperator) []nropv1.NodeGroupStatus {
+	ngStatuses := []nropv1.NodeGroupStatus{}
+	ngNameToConfigMap := map[string]nropv1.NodeGroupConfig{}
+	for _, mcp := range instance.Status.MachineConfigPools {
+		ngNameToConfigMap[mcp.NodeGroupName] = *mcp.Config //configs for mcps of the same node group ARE similar
+	}
+	for name, config := range ngNameToConfigMap {
+		cfg := config.DeepCopy()
+		ngStatuses = append(ngStatuses, nropv1.NodeGroupStatus{Name: name, Config: cfg})
+	}
+	return ngStatuses
+}
+
+func syncNodeGroupsStatusesDaemonSets(instance *nropv1.NUMAResourcesOperator) []nropv1.NodeGroupStatus {
+	ngNameToDaemonSetsMap := map[string][]nropv1.NamespacedName{}
+	for _, ds := range instance.Status.DaemonSets {
+		// extract associated name
+		name := objectnames.ExtractAssociatedNameFromRTEDaemonset(ds.Name, instance.Name)
+		for _, mcp := range instance.Status.MachineConfigPools {
+			if mcp.Name != name {
+				continue
+			}
+			ngName := mcp.NodeGroupName
+			if ngNameToDaemonSetsMap[ngName] == nil {
+				ngNameToDaemonSetsMap[ngName] = []nropv1.NamespacedName{ds}
+				continue
+			}
+			ngNameToDaemonSetsMap[ngName] = append(ngNameToDaemonSetsMap[ngName], ds)
+		}
+	}
+
+	for _, ng := range instance.Status.NodeGroups {
+		ng.DaemonSets = ngNameToDaemonSetsMap[ng.Name]
+	}
+
+	return instance.Status.NodeGroups
 }
 
 func (r *NUMAResourcesOperatorReconciler) syncDaemonSetsStatuses(ctx context.Context, rd client.Reader, daemonSetsInfo []nropv1.NamespacedName) ([]nropv1.NamespacedName, bool, error) {

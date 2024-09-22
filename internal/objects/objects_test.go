@@ -17,10 +17,13 @@
 package objects
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
 )
 
 func TestNewNUMAResourcesOperator(t *testing.T) {
@@ -91,5 +94,120 @@ func TestNewNamespace(t *testing.T) {
 		if gotValue != value {
 			t.Errorf("unexpected value for %q: got %q expectdd %q", key, gotValue, value)
 		}
+	}
+}
+
+func TestGetDaemonSetListFromNodeGroupStatuses(t *testing.T) {
+	testcases := []struct {
+		name   string
+		input  []nropv1.NodeGroupStatus
+		output []nropv1.NamespacedName
+	}{
+		{
+			name: "single nodegroup",
+			input: []nropv1.NodeGroupStatus{
+				{
+					Name: "nodegroup-1",
+					DaemonSets: []nropv1.NamespacedName{
+						{
+							Name: "daemonset-1",
+						},
+					},
+				},
+			},
+			output: []nropv1.NamespacedName{
+				{
+					Name: "daemonset-1",
+				},
+			},
+		},
+		{
+			name: "multiple nodegroups - each with non empty ds",
+			input: []nropv1.NodeGroupStatus{
+				{
+					Name: "nodegroup-1",
+					DaemonSets: []nropv1.NamespacedName{
+						{
+							Name: "daemonset-1",
+						},
+						{
+							Name: "daemonset-2",
+						},
+					},
+				},
+				{
+					Name: "nodegroup-2",
+					DaemonSets: []nropv1.NamespacedName{
+						{
+							Name: "daemonset-3",
+						},
+					},
+				},
+				{
+					Name: "nodegroup-3",
+					DaemonSets: []nropv1.NamespacedName{
+						{
+							Name: "daemonset-1", //duplicates should not exist, if they do it's a bug and we don't want to ignore it
+						},
+					},
+				},
+			},
+			output: []nropv1.NamespacedName{
+				{
+					Name: "daemonset-1",
+				},
+				{
+					Name: "daemonset-2",
+				},
+				{
+					Name: "daemonset-3",
+				},
+				{
+					Name: "daemonset-1",
+				},
+			},
+		},
+		{
+			name: "multiple nodegroups - some with empty ds",
+			input: []nropv1.NodeGroupStatus{
+				{
+					Name:       "nodegroup-1",
+					DaemonSets: []nropv1.NamespacedName{},
+				},
+				{
+					Name: "nodegroup-2",
+					DaemonSets: []nropv1.NamespacedName{
+						{
+							Name: "daemonset-3",
+						},
+					},
+				},
+				{
+					Name: "nodegroup-3",
+					DaemonSets: []nropv1.NamespacedName{
+						{
+							Name: "daemonset-1",
+						},
+					},
+				},
+			},
+			output: []nropv1.NamespacedName{
+				{
+					Name: "daemonset-3",
+				},
+				{
+					Name: "daemonset-1",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := GetDaemonSetListFromNodeGroupStatuses(tc.input)
+			if !reflect.DeepEqual(got, tc.output) {
+				t.Errorf("unexpected daemonsets list:\n\t%v\n\tgot:\n\t%v", tc.output, got)
+			}
+		})
 	}
 }
