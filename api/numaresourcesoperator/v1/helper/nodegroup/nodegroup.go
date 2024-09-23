@@ -45,33 +45,33 @@ func (ttr Tree) Clone() Tree {
 }
 
 func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]Tree, error) {
+	// node groups are validated by the controller before getting to this phase, so for sure all node groups will be valid at this point.
+	// a valid node group has either NodeSelector OR MachineConfigPoolSelector, not both
 	var result []Tree
 	for idx := range nodeGroups {
 		nodeGroup := &nodeGroups[idx] // shortcut
-
-		if nodeGroup.MachineConfigPoolSelector == nil {
-			continue
-		}
-		selector, err := metav1.LabelSelectorAsSelector(nodeGroup.MachineConfigPoolSelector)
-		if err != nil {
-			klog.Errorf("bad node group machine config pool selector %q", nodeGroup.MachineConfigPoolSelector.String())
-			continue
-		}
-
 		treeMCPs := []*mcov1.MachineConfigPool{}
-		for i := range mcps.Items {
-			mcp := &mcps.Items[i] // shortcut
-			mcpLabels := labels.Set(mcp.Labels)
-			if !selector.Matches(mcpLabels) {
+
+		if nodeGroup.MachineConfigPoolSelector != nil {
+			selector, err := metav1.LabelSelectorAsSelector(nodeGroup.MachineConfigPoolSelector)
+			if err != nil {
+				klog.Errorf("bad node group machine config pool selector %q", nodeGroup.MachineConfigPoolSelector.String())
 				continue
 			}
-			treeMCPs = append(treeMCPs, mcp)
-		}
 
-		if len(treeMCPs) == 0 {
-			return nil, fmt.Errorf("failed to find MachineConfigPool for the node group with the selector %q", nodeGroup.MachineConfigPoolSelector.String())
-		}
+			for i := range mcps.Items {
+				mcp := &mcps.Items[i] // shortcut
+				mcpLabels := labels.Set(mcp.Labels)
+				if !selector.Matches(mcpLabels) {
+					continue
+				}
+				treeMCPs = append(treeMCPs, mcp)
+			}
 
+			if len(treeMCPs) == 0 {
+				return nil, fmt.Errorf("failed to find MachineConfigPool for the node group with the selector %q", nodeGroup.MachineConfigPoolSelector.String())
+			}
+		}
 		result = append(result, Tree{
 			NodeGroup:          nodeGroup,
 			MachineConfigPools: treeMCPs,

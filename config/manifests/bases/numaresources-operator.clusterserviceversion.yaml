@@ -74,10 +74,14 @@ spec:
           Operator
         displayName: Condition reported
         path: conditions
-      - description: DaemonSets of the configured RTEs, one per node group
+      - description: |-
+          DaemonSets of the configured RTEs, one per node group
+          This field is not populated on HyperShift. Use NodeGroups instead.
         displayName: RTE DaemonSets
         path: daemonsets
-      - description: MachineConfigPools resolved from configured node groups
+      - description: |-
+          MachineConfigPools resolved from configured node groups
+          This field is not populated on HyperShift. Use NodeGroups instead.
         displayName: RTE MCPs from node groups
         path: machineconfigpools
       - description: Conditions represents the latest available observations of MachineConfigPool

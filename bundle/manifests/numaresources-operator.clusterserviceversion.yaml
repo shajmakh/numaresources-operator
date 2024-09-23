@@ -62,7 +62,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2024-09-24T09:03:48Z"
+    createdAt: "2024-09-24T10:03:52Z"
     olm.skipRange: '>=4.17.0 <4.18.0'
     operators.operatorframework.io/builder: operator-sdk-v1.36.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -135,10 +135,14 @@ spec:
           Operator
         displayName: Condition reported
         path: conditions
-      - description: DaemonSets of the configured RTEs, one per node group
+      - description: |-
+          DaemonSets of the configured RTEs, one per node group
+          This field is not populated on HyperShift. Use NodeGroups instead.
         displayName: RTE DaemonSets
         path: daemonsets
-      - description: MachineConfigPools resolved from configured node groups
+      - description: |-
+          MachineConfigPools resolved from configured node groups
+          This field is not populated on HyperShift. Use NodeGroups instead.
         displayName: RTE MCPs from node groups
         path: machineconfigpools
       - description: Conditions represents the latest available observations of MachineConfigPool

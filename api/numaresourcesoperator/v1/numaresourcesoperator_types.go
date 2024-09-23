@@ -118,7 +118,14 @@ type NodeGroup struct {
 	// If not provided, is determined by the system.
 	// +optional
 	Name *string `json:"name,omitempty"`
-	// MachineConfigPoolSelector defines label selector for the machine config pool
+	// NodeSelector allows to set directly the labels which nodes belonging to this nodegroup must match.
+	// This offer greater flexibility than using a MachineConfigPoolSelector, You can use either NodeSelector
+	// or machineConfigPoolSelector, not both at the same time.
+	// +optional
+	NodeSelector *metav1.LabelSelector `json:"nodeSelector,omitempty"`
+	// MachineConfigPoolSelector defines label selector for the Machine Config Pool. If used, a NodeGroup will
+	// match the same nodes this Machine Config Pool is matching.
+	// You can use either NodeSelector or machineConfigPoolSelector, not both at the same time.
 	// +optional
 	MachineConfigPoolSelector *metav1.LabelSelector `json:"machineConfigPoolSelector,omitempty"`
 	// Config defines the RTE behavior for this NodeGroup
@@ -152,9 +159,11 @@ type NodeGroupStatus struct {
 // NUMAResourcesOperatorStatus defines the observed state of NUMAResourcesOperator
 type NUMAResourcesOperatorStatus struct {
 	// DaemonSets of the configured RTEs, one per node group
+	// This field is not populated on HyperShift. Use NodeGroups instead.
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="RTE DaemonSets"
 	DaemonSets []NamespacedName `json:"daemonsets,omitempty"`
 	// MachineConfigPools resolved from configured node groups
+	// This field is not populated on HyperShift. Use NodeGroups instead.
 	//+operator-sdk:csv:customresourcedefinitions:type=status,displayName="RTE MCPs from node groups"
 	MachineConfigPools []MachineConfigPool `json:"machineconfigpools,omitempty"`
 	// NodeGroups report the observed status of the configured NodeGroups, matching by their name

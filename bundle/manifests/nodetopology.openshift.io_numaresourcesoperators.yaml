@@ -138,8 +138,10 @@ spec:
                           type: array
                       type: object
                     machineConfigPoolSelector:
-                      description: MachineConfigPoolSelector defines label selector
-                        for the machine config pool
+                      description: |-
+                        MachineConfigPoolSelector defines label selector for the Machine Config Pool. If used, a NodeGroup will
+                        match the same nodes this Machine Config Pool is matching.
+                        You can use either NodeSelector or machineConfigPoolSelector, not both at the same time.
                       properties:
                         matchExpressions:
                           description: matchExpressions is a list of label selector
@@ -187,6 +189,53 @@ spec:
                         Name is the name used to identify this node group. Has to be unique among node groups.
                         If not provided, is determined by the system.
                       type: string
+                    nodeSelector:
+                      description: |-
+                        NodeSelector allows to set directly the labels which nodes belonging to this nodegroup must match.
+                        This offer greater flexibility than using a MachineConfigPoolSelector, You can use either NodeSelector
+                        or machineConfigPoolSelector, not both at the same time.
+                      properties:
+                        matchExpressions:
+                          description: matchExpressions is a list of label selector
+                            requirements. The requirements are ANDed.
+                          items:
+                            description: |-
+                              A label selector requirement is a selector that contains values, a key, and an operator that
+                              relates the key and values.
+                            properties:
+                              key:
+                                description: key is the label key that the selector
+                                  applies to.
+                                type: string
+                              operator:
+                                description: |-
+                                  operator represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists and DoesNotExist.
+                                type: string
+                              values:
+                                description: |-
+                                  values is an array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. This array is replaced during a strategic
+                                  merge patch.
+                                items:
+                                  type: string
+                                type: array
+                            required:
+                            - key
+                            - operator
+                            type: object
+                          type: array
+                        matchLabels:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                            map is equivalent to an element of matchExpressions, whose key field is "key", the
+                            operator is "In", and the values array contains only "value". The requirements are ANDed.
+                          type: object
+                      type: object
+                      x-kubernetes-map-type: atomic
                   type: object
                 type: array
               podExcludes:
@@ -267,7 +316,9 @@ spec:
                   type: object
                 type: array
               daemonsets:
-                description: DaemonSets of the configured RTEs, one per node group
+                description: |-
+                  DaemonSets of the configured RTEs, one per node group
+                  This field is not populated on HyperShift. Use NodeGroups instead.
                 items:
                   description: |-
                     NamespacedName comprises a resource name, with a mandatory namespace,
@@ -280,7 +331,9 @@ spec:
                   type: object
                 type: array
               machineconfigpools:
-                description: MachineConfigPools resolved from configured node groups
+                description: |-
+                  MachineConfigPools resolved from configured node groups
+                  This field is not populated on HyperShift. Use NodeGroups instead.
                 items:
                   description: MachineConfigPool defines the observed state of each
                     MachineConfigPool selected by node groups

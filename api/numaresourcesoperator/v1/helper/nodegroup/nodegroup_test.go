@@ -88,6 +88,19 @@ func TestFindTrees(t *testing.T) {
 			mcps: &mcpList,
 		},
 		{
+			name: "ng1-mcp not found",
+			mcps: &mcpList,
+			ngs: []nropv1.NodeGroup{
+				{
+					MachineConfigPoolSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"mcp-label": "notfound",
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "ng1-mcp1",
 			mcps: &mcpList,
 			ngs: []nropv1.NodeGroup{
@@ -185,11 +198,42 @@ func TestFindTrees(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "ng1- nodeSelector and MCPSelector one per nodegroup",
+			mcps: &mcpList,
+			ngs: []nropv1.NodeGroup{
+				{
+					NodeSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"ns-label": "ns1",
+						},
+					},
+				},
+				{
+					MachineConfigPoolSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"mcp-label-2a": "test2a",
+						},
+					},
+				},
+			},
+			expected: []Tree{
+				{
+					MachineConfigPools: []*mcov1.MachineConfigPool{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "mcp2",
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := FindTrees(tt.mcps, tt.ngs)
-			if err != nil {
+			if err != nil && len(tt.expected) != 0 {
 				t.Errorf("unexpected error: %v", err)
 			}
 			gotNames := mcpNamesFromTrees(got)
@@ -200,12 +244,78 @@ func TestFindTrees(t *testing.T) {
 
 			// backward compat
 			gotMcps, err := findListByNodeGroups(tt.mcps, tt.ngs)
-			if err != nil {
+			if err != nil && len(tt.expected) != 0 {
 				t.Errorf("unexpected error checking backward compat: %v", err)
 			}
 			compatNames := mcpNamesFromList(gotMcps)
 			if !reflect.DeepEqual(gotNames, compatNames) {
 				t.Errorf("Trees mismatch (non backward compatible): got=%v compat=%v", gotNames, compatNames)
+			}
+		})
+	}
+
+	ngName := "ng-test"
+	nodeGroupNameGenerationTestcases := []struct {
+		description    string
+		ng             nropv1.NodeGroup
+		expectedNGName string
+	}{
+		{
+			description: "node group with node selector and custom name",
+			ng: nropv1.NodeGroup{
+				NodeSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"ns-label": "ns1",
+					},
+				},
+				Name: &ngName,
+			},
+			expectedNGName: ngName,
+		},
+		{
+			description: "node group with MCP selector and custom name",
+			ng: nropv1.NodeGroup{
+				MachineConfigPoolSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"mcp-label-2a": "test2a",
+					},
+				},
+				Name: &ngName,
+			},
+			expectedNGName: ngName,
+		},
+		{
+			description: "node group with MCP selector and unset name",
+			ng: nropv1.NodeGroup{
+				MachineConfigPoolSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"mcp-label-2a": "test2a",
+					},
+				},
+			},
+		},
+		{
+			description: "node group with node selector and unset name",
+			ng: nropv1.NodeGroup{
+				NodeSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"ns-label": "ns1",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range nodeGroupNameGenerationTestcases {
+		t.Run(tt.description, func(t *testing.T) {
+			got, err := FindTrees(&mcpList, []nropv1.NodeGroup{tt.ng})
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if tt.expectedNGName != "" {
+				if tt.expectedNGName != *got[0].NodeGroup.Name {
+					t.Errorf("mismatch generated node group names: got=%v expected=%v", got[0].NodeGroup.Name, tt.expectedNGName)
+				}
 			}
 		})
 	}

@@ -60,18 +60,21 @@ func MachineConfigPoolDuplicates(trees []nodegroupv1.Tree) error {
 // NodeGroups validates the node groups for nil values and duplicates.
 // TODO: move it under the validation webhook once we will have one
 func NodeGroups(nodeGroups []nropv1.NodeGroup) error {
-	if err := nodeGroupsMachineConfigPoolSelector(nodeGroups); err != nil {
+	// selector validation
+	if err := nodeGroupsSelector(nodeGroups); err != nil {
+		return err
+	}
+	if err := nodeGroupsDuplicatesByMCPSelector(nodeGroups); err != nil {
+		return err
+	}
+	if err := nodeGroupsDuplicatesByNodeSelector(nodeGroups); err != nil {
+		return err
+	}
+	if err := nodeGroupLabelSelector(nodeGroups); err != nil {
 		return err
 	}
 
-	if err := nodeGroupsDuplicates(nodeGroups); err != nil {
-		return err
-	}
-
-	if err := nodeGroupMachineConfigPoolSelector(nodeGroups); err != nil {
-		return err
-	}
-
+	// name validation
 	if err := nodeGroupsNames(nodeGroups); err != nil {
 		return err
 	}
@@ -84,10 +87,13 @@ func NodeGroups(nodeGroups []nropv1.NodeGroup) error {
 }
 
 // TODO: move it under the validation webhook once we will have one
-func nodeGroupsMachineConfigPoolSelector(nodeGroups []nropv1.NodeGroup) error {
+func nodeGroupsSelector(nodeGroups []nropv1.NodeGroup) error {
 	for _, nodeGroup := range nodeGroups {
-		if nodeGroup.MachineConfigPoolSelector == nil {
-			return fmt.Errorf("one of the node groups does not have machineConfigPoolSelector")
+		if nodeGroup.MachineConfigPoolSelector == nil && nodeGroup.NodeSelector == nil {
+			return fmt.Errorf("one of the node groups does not specify a selector")
+		}
+		if nodeGroup.MachineConfigPoolSelector != nil && nodeGroup.NodeSelector != nil {
+			return fmt.Errorf("only one selector is allowed to be specified under a node group")
 		}
 	}
 
@@ -95,7 +101,7 @@ func nodeGroupsMachineConfigPoolSelector(nodeGroups []nropv1.NodeGroup) error {
 }
 
 // TODO: move it under the validation webhook once we will have one
-func nodeGroupsDuplicates(nodeGroups []nropv1.NodeGroup) error {
+func nodeGroupsDuplicatesByMCPSelector(nodeGroups []nropv1.NodeGroup) error {
 	duplicates := map[string]int{}
 	for _, nodeGroup := range nodeGroups {
 		if nodeGroup.MachineConfigPoolSelector == nil {
@@ -113,6 +119,35 @@ func nodeGroupsDuplicates(nodeGroups []nropv1.NodeGroup) error {
 	for selector, count := range duplicates {
 		if count > 1 {
 			duplicateErrors = append(duplicateErrors, fmt.Sprintf("the node group with the machineConfigPoolSelector %q has duplicates", selector))
+		}
+	}
+
+	if len(duplicateErrors) > 0 {
+		return fmt.Errorf(strings.Join(duplicateErrors, "; "))
+	}
+
+	return nil
+}
+
+// TODO: move it under the validation webhook once we will have one
+func nodeGroupsDuplicatesByNodeSelector(nodeGroups []nropv1.NodeGroup) error {
+	duplicates := map[string]int{}
+	for _, nodeGroup := range nodeGroups {
+		if nodeGroup.NodeSelector == nil {
+			continue
+		}
+
+		key := nodeGroup.NodeSelector.String()
+		if _, ok := duplicates[key]; !ok {
+			duplicates[key] = 0
+		}
+		duplicates[key] += 1
+	}
+
+	var duplicateErrors []string
+	for selector, count := range duplicates {
+		if count > 1 {
+			duplicateErrors = append(duplicateErrors, fmt.Sprintf("the nodeSelector name %q has duplicates", selector))
 		}
 	}
 
@@ -153,31 +188,19 @@ func nodeGroupNamesDuplicates(nodeGroups []nropv1.NodeGroup) error {
 }
 
 // TODO: move it under the validation webhook once we will have one
-func nodeGroupsNames(nodeGroups []nropv1.NodeGroup) error {
-	for _, nodeGroup := range nodeGroups {
-		if nodeGroup.Name == nil {
-			continue
-		}
-
-		trimmed := strings.TrimSpace(*nodeGroup.Name)
-		trimmed = strings.Replace(trimmed, " ", "", -1)
-
-		if trimmed != *nodeGroup.Name || trimmed == "" {
-			return fmt.Errorf("node group name should not contain spaces or be empty: %s", *nodeGroup.Name)
-		}
-	}
-	return nil
-}
-
-// TODO: move it under the validation webhook once we will have one
-func nodeGroupMachineConfigPoolSelector(nodeGroups []nropv1.NodeGroup) error {
+func nodeGroupLabelSelector(nodeGroups []nropv1.NodeGroup) error {
 	var selectorsErrors []string
+	var selector metav1.LabelSelector
 	for _, nodeGroup := range nodeGroups {
-		if nodeGroup.MachineConfigPoolSelector == nil {
-			continue
+		if nodeGroup.MachineConfigPoolSelector != nil {
+			selector = *nodeGroup.MachineConfigPoolSelector
 		}
 
-		if _, err := metav1.LabelSelectorAsSelector(nodeGroup.MachineConfigPoolSelector); err != nil {
+		if nodeGroup.NodeSelector != nil {
+			selector = *nodeGroup.NodeSelector
+		}
+
+		if _, err := metav1.LabelSelectorAsSelector(&selector); err != nil {
 			selectorsErrors = append(selectorsErrors, err.Error())
 		}
 	}
@@ -186,6 +209,22 @@ func nodeGroupMachineConfigPoolSelector(nodeGroups []nropv1.NodeGroup) error {
 		return fmt.Errorf(strings.Join(selectorsErrors, "; "))
 	}
 
+	return nil
+}
+
+// TODO: move it under the validation webhook once we will have one
+func nodeGroupsNames(nodeGroups []nropv1.NodeGroup) error {
+	for _, nodeGroup := range nodeGroups {
+		if nodeGroup.Name == nil {
+			continue
+		}
+
+		trimmed := strings.TrimSpace(*nodeGroup.Name)
+		trimmed = strings.Replace(trimmed, " ", "", -1)
+		if trimmed != *nodeGroup.Name || trimmed == "" {
+			return fmt.Errorf("node group name should not contain spaces or be empty: %s", *nodeGroup.Name)
+		}
+	}
 	return nil
 }
 

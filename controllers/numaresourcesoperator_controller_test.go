@@ -105,55 +105,77 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 
 	Context("with unexpected NRO CR name", func() {
 		It("should updated the CR condition to degraded", func() {
-			nro := testobjs.NewNUMAResourcesOperator("test", nil)
+			nro := testobjs.NewNUMAResourcesOperator("test")
 			verifyDegradedCondition(nro, status.ConditionTypeIncorrectNUMAResourcesOperatorResourceName)
 		})
 	})
 
-	Context("with NRO empty machine config pool selector node group", func() {
-		It("should updated the CR condition to degraded", func() {
-			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{nil})
+	Context("with NRO empty selectors node group", func() {
+		It("should update the CR condition to degraded", func() {
+			ng := nropv1.NodeGroup{MachineConfigPoolSelector: nil, NodeSelector: nil}
+			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, ng)
+			verifyDegradedCondition(nro, validation.NodeGroupsError)
+		})
+	})
+
+	Context("with NRO mutiple selectors set on same node group", func() {
+		It("should update the CR condition to degraded", func() {
+			ng := nropv1.NodeGroup{
+				MachineConfigPoolSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"test": "test"},
+				},
+				NodeSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"test": "test"},
+				},
+			}
+
+			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, ng)
 			verifyDegradedCondition(nro, validation.NodeGroupsError)
 		})
 	})
 
 	Context("without available machine config pools", func() {
 		It("should updated the CR condition to degraded", func() {
-			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{
-				{
+			ng := nropv1.NodeGroup{
+				MachineConfigPoolSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"test": "test"},
 				},
-			})
+			}
+			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, ng)
 			verifyDegradedCondition(nro, validation.NodeGroupsError)
 		})
 	})
 
 	Context("with duplicated node group names", func() {
 		It("should updated the CR condition to degraded", func() {
-			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{
-				{
+			name := "ng-test"
+			ng1 := nropv1.NodeGroup{
+				Name: &name,
+				MachineConfigPoolSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"test1": "test1"},
 				},
-				{
+			}
+			ng2 := nropv1.NodeGroup{
+				Name: &name,
+				MachineConfigPoolSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"test2": "test2"},
 				},
-			})
-			name := "ng-test"
-			nro.Spec.NodeGroups[0].Name = &name
-			nro.Spec.NodeGroups[1].Name = &name
+			}
+			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, ng1, ng2)
 			verifyDegradedCondition(nro, validation.NodeGroupsError)
 		})
 	})
 
 	Context("with invalid node group name", func() {
 		It("should updated the CR condition to degraded", func() {
-			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{
-				{
+			name := "ng test" //spaces aren't allowed
+			ng := nropv1.NodeGroup{
+				Name: &name,
+				MachineConfigPoolSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"test1": "test1"},
 				},
-			})
-			name := "ng test" //spaces aren't allowed
-			nro.Spec.NodeGroups[0].Name = &name
+			}
+			nro := testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, ng)
 			verifyDegradedCondition(nro, validation.NodeGroupsError)
 		})
 	})
@@ -165,6 +187,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 
 		var reconciler *NUMAResourcesOperatorReconciler
 		var label1, label2 map[string]string
+		var ng1, ng2 nropv1.NodeGroup
 
 		BeforeEach(func() {
 			label1 = map[string]string{
@@ -174,10 +197,19 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				"test2": "test2",
 			}
 
-			nro = testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{
-				{MatchLabels: label1},
-				{MatchLabels: label2},
-			})
+			ng1 = nropv1.NodeGroup{
+				MachineConfigPoolSelector: &metav1.LabelSelector{
+					MatchLabels: label1,
+				},
+			}
+
+			ng2 = nropv1.NodeGroup{
+				MachineConfigPoolSelector: &metav1.LabelSelector{
+					MatchLabels: label2,
+				},
+			}
+
+			nro = testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, ng1, ng2)
 
 			mcp1 = testobjs.NewMachineConfigPool("test1", label1, &metav1.LabelSelector{MatchLabels: label1}, &metav1.LabelSelector{MatchLabels: label1})
 			mcp2 = testobjs.NewMachineConfigPool("test2", label2, &metav1.LabelSelector{MatchLabels: label2}, &metav1.LabelSelector{MatchLabels: label2})
@@ -259,7 +291,6 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				Expect(thirdLoopResult).To(Equal(reconcile.Result{RequeueAfter: 5 * time.Second}))
 			})
 			It("should delete also the corresponding DaemonSet", func() {
-
 				ds := &appsv1.DaemonSet{}
 
 				// Check ds1 still exist
@@ -277,7 +308,6 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				Expect(reconciler.Client.Get(context.TODO(), ds2Key, ds)).To(HaveOccurred(), "error: Daemonset %v should have been deleted", ds2Key)
 			})
 			It("should delete also the corresponding Machineconfig", func() {
-
 				mc := &machineconfigv1.MachineConfig{}
 
 				// Check ds1 still exist
@@ -327,6 +357,21 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 				})
 			})
 		})
+		When("update NodeGroup with NodeSelector on existing node group", func() {
+			It("should update the CR condition to degraded", func(ctx context.Context) {
+				ng1WithNodeSelector := ng1.DeepCopy()
+				ng1WithNodeSelector.NodeSelector = ng1WithNodeSelector.MachineConfigPoolSelector
+				key := client.ObjectKeyFromObject(nro)
+				Eventually(func() error {
+					nroUpdated := &nropv1.NUMAResourcesOperator{}
+					Expect(reconciler.Client.Get(ctx, key, nroUpdated))
+					nroUpdated.Spec.NodeGroups[0] = *ng1WithNodeSelector
+					return reconciler.Client.Update(context.TODO(), nroUpdated)
+				}).WithPolling(1 * time.Second).WithTimeout(30 * time.Second).ShouldNot(HaveOccurred())
+
+				verifyDegradedCondition(nro, validation.NodeGroupsError)
+			})
+		})
 	})
 	Context("with correct NRO CR", func() {
 		nodeGroupCustomName := "custom-node-group"
@@ -344,14 +389,20 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 			label2 := map[string]string{
 				"test2": "test2",
 			}
+			ng1 := nropv1.NodeGroup{
+				Name: &nodeGroupCustomName,
+				MachineConfigPoolSelector: &metav1.LabelSelector{
+					MatchLabels: label1,
+				},
+			}
 
-			nro = testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, []*metav1.LabelSelector{
-				{MatchLabels: label1},
-				{MatchLabels: label2},
-			})
+			ng2 := nropv1.NodeGroup{
+				MachineConfigPoolSelector: &metav1.LabelSelector{
+					MatchLabels: label2,
+				},
+			}
 
-			nro.Spec.NodeGroups[0].Name = &nodeGroupCustomName
-
+			nro = testobjs.NewNUMAResourcesOperator(objectnames.DefaultNUMAResourcesOperatorCrName, ng1, ng2)
 			mcp1 = testobjs.NewMachineConfigPool("test1", label1, &metav1.LabelSelector{MatchLabels: label1}, &metav1.LabelSelector{MatchLabels: label1})
 			mcp2 = testobjs.NewMachineConfigPool("test2", label2, &metav1.LabelSelector{MatchLabels: label2}, &metav1.LabelSelector{MatchLabels: label2})
 		})
