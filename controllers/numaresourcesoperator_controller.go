@@ -136,14 +136,22 @@ func (r *NUMAResourcesOperatorReconciler) Reconcile(ctx context.Context, req ctr
 		return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
 	}
 
-	trees, err := getTreesByNodeGroup(ctx, r.Client, instance.Spec.NodeGroups)
+	trees, err := getTreesByNodeGroup(ctx, r.Client, instance.Spec.NodeGroups, r.Platform)
 	if err != nil {
 		return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
 	}
 
-	if err := validation.MachineConfigPoolDuplicates(trees); err != nil {
+	if err := validation.SourcePoolDuplicates(trees); err != nil {
 		return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
 	}
+
+	if r.Platform == platform.OpenShift {
+		if err := validation.MachineConfigPoolDuplicates(trees); err != nil {
+			return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
+		}
+	}
+
+	// no need to validate duplicates for NodePoolSelector as it is 1:1 relation with NodeGroup.PoolName
 
 	for idx := range trees {
 		conf := trees[idx].NodeGroup.NormalizeConfig()
@@ -195,7 +203,7 @@ func messageFromError(err error) string {
 	return unwErr.Error()
 }
 
-func (r *NUMAResourcesOperatorReconciler) reconcileResourceAPI(ctx context.Context, instance *nropv1.NUMAResourcesOperator, trees []nodegroupv1.Tree) (bool, ctrl.Result, string, error) {
+func (r *NUMAResourcesOperatorReconciler) reconcileResourceAPI(ctx context.Context, instance *nropv1.NUMAResourcesOperator) (bool, ctrl.Result, string, error) {
 	applied, err := r.syncNodeResourceTopologyAPI(ctx)
 	if err != nil {
 		r.Recorder.Eventf(instance, corev1.EventTypeWarning, "FailedCRDInstall", "Failed to install Node Resource Topology CRD: %v", err)
@@ -256,7 +264,7 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResourceDaemonSet(ctx context
 }
 
 func (r *NUMAResourcesOperatorReconciler) reconcileResource(ctx context.Context, instance *nropv1.NUMAResourcesOperator, trees []nodegroupv1.Tree) (ctrl.Result, string, error) {
-	if done, res, cond, err := r.reconcileResourceAPI(ctx, instance, trees); done {
+	if done, res, cond, err := r.reconcileResourceAPI(ctx, instance); done {
 		return res, cond, err
 	}
 
@@ -264,11 +272,13 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResource(ctx context.Context,
 		if done, res, cond, err := r.reconcileResourceMachineConfig(ctx, instance, trees); done {
 			return res, cond, err
 		}
+		instance.Status.NodeGroups = syncNodeGroupsStatuses(instance)
 	}
 
 	if done, res, cond, err := r.reconcileResourceDaemonSet(ctx, instance, trees); done {
 		return res, cond, err
 	}
+	instance.Status.NodeGroups = syncNodeGroupsStatusesDaemonSets(instance)
 
 	return ctrl.Result{}, status.ConditionAvailable, nil
 }
@@ -292,6 +302,31 @@ func (r *NUMAResourcesOperatorReconciler) syncDaemonSetsStatuses(ctx context.Con
 		dsStatuses = append(dsStatuses, nname)
 	}
 	return dsStatuses, true, nil
+}
+
+func syncNodeGroupsStatuses(instance *nropv1.NUMAResourcesOperator) []nropv1.NodeGroupStatus {
+	ngStatuses := []nropv1.NodeGroupStatus{}
+	for _, mcp := range instance.Status.MachineConfigPools {
+		cfg := mcp.Config.DeepCopy()
+		ngStatuses = append(ngStatuses, nropv1.NodeGroupStatus{PoolName: mcp.Name, Config: cfg})
+	}
+	return ngStatuses
+
+}
+
+func syncNodeGroupsStatusesDaemonSets(instance *nropv1.NUMAResourcesOperator) []nropv1.NodeGroupStatus {
+	for _, ds := range instance.Status.DaemonSets {
+		copyOfDS := ds.DeepCopy()
+		extractedPoolName := objectnames.ExtractPoolNameFromRTEDaemonset(copyOfDS.Name, instance.Name)
+
+		for idx, ng := range instance.Status.NodeGroups {
+			if ng.PoolName == extractedPoolName {
+				instance.Status.NodeGroups[idx].DaemonSet = copyOfDS
+				break
+			}
+		}
+	}
+	return instance.Status.NodeGroups
 }
 
 func (r *NUMAResourcesOperatorReconciler) syncNodeResourceTopologyAPI(ctx context.Context) (bool, error) {
@@ -764,10 +799,18 @@ func isDaemonSetReady(ds *appsv1.DaemonSet) bool {
 	return ok
 }
 
-func getTreesByNodeGroup(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroup) ([]nodegroupv1.Tree, error) {
-	mcps := &machineconfigv1.MachineConfigPoolList{}
-	if err := cli.List(ctx, mcps); err != nil {
-		return nil, err
+func getTreesByNodeGroup(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroup, platf platform.Platform) ([]nodegroupv1.Tree, error) {
+	if platf == platform.OpenShift {
+		mcps := &machineconfigv1.MachineConfigPoolList{}
+		if err := cli.List(ctx, mcps); err != nil {
+			return nil, err
+		}
+		return nodegroupv1.FindTreesOpenshift(mcps, nodeGroups)
 	}
-	return nodegroupv1.FindTrees(mcps, nodeGroups)
+
+	//if platf == platform.HostedControlPlane {
+	//	return nodegroupv1.FindTreesHCP(nodeGroups), nil
+	//}
+
+	return nil, fmt.Errorf("unsupported platform")
 }

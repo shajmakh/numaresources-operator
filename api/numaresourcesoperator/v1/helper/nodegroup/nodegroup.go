@@ -31,6 +31,7 @@ import (
 type Tree struct {
 	NodeGroup          *nropv1.NodeGroup
 	MachineConfigPools []*mcov1.MachineConfigPool
+	NodePoolSelector   *metav1.LabelSelector
 }
 
 func (ttr Tree) Clone() Tree {
@@ -44,34 +45,70 @@ func (ttr Tree) Clone() Tree {
 	return ret
 }
 
-func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]Tree, error) {
+// TODO add unit tests
+func FindTreesHCP(nodeGroups []nropv1.NodeGroup) []Tree {
+	// node groups are validated by the controller before getting to this phase, so for sure all node groups will be valid at this point.
+	// a valid node group has either PoolName OR MachineConfigPoolSelector, not both
 	var result []Tree
 	for idx := range nodeGroups {
 		nodeGroup := &nodeGroups[idx] // shortcut
 
-		if nodeGroup.MachineConfigPoolSelector == nil {
-			continue
-		}
-		selector, err := metav1.LabelSelectorAsSelector(nodeGroup.MachineConfigPoolSelector)
-		if err != nil {
-			klog.Errorf("bad node group machine config pool selector %q", nodeGroup.MachineConfigPoolSelector.String())
+		if nodeGroup.PoolName == nil {
 			continue
 		}
 
+		result = append(result, Tree{
+			NodeGroup: nodeGroup,
+			NodePoolSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"hypershift.openshift.io/node-pool": *nodeGroup.PoolName,
+				},
+			},
+		})
+	}
+	return result
+}
+
+func FindTreesOpenshift(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]Tree, error) {
+	// node groups are validated by the controller before getting to this phase, so for sure all node groups will be valid at this point.
+	// a valid node group has either PoolName OR MachineConfigPoolSelector, not both. Getting hear means operator is deployed on Openshift thus processing MCPs
+	var result []Tree
+	for idx := range nodeGroups {
+		nodeGroup := &nodeGroups[idx] // shortcut
 		treeMCPs := []*mcov1.MachineConfigPool{}
-		for i := range mcps.Items {
-			mcp := &mcps.Items[i] // shortcut
-			mcpLabels := labels.Set(mcp.Labels)
-			if !selector.Matches(mcpLabels) {
+
+		if nodeGroup.PoolName != nil {
+			for i := range mcps.Items {
+				mcp := &mcps.Items[i]
+				if mcp.Name != *nodeGroup.PoolName {
+					continue
+				}
+				treeMCPs = append(treeMCPs, mcp)
+			}
+			if len(treeMCPs) > 1 {
+				return nil, fmt.Errorf("pool name %q points to more than 1 pool: %d", *nodeGroup.PoolName, len(treeMCPs))
+			}
+		}
+
+		if nodeGroup.MachineConfigPoolSelector != nil {
+			selector, err := metav1.LabelSelectorAsSelector(nodeGroup.MachineConfigPoolSelector)
+			if err != nil {
+				klog.Errorf("bad node group machine config pool selector %q", nodeGroup.MachineConfigPoolSelector.String())
 				continue
 			}
-			treeMCPs = append(treeMCPs, mcp)
-		}
 
+			for i := range mcps.Items {
+				mcp := &mcps.Items[i] // shortcut
+				mcpLabels := labels.Set(mcp.Labels)
+				if !selector.Matches(mcpLabels) {
+					continue
+				}
+				treeMCPs = append(treeMCPs, mcp)
+			}
+		}
 		if len(treeMCPs) == 0 {
 			return nil, fmt.Errorf("failed to find MachineConfigPool for the node group with the selector %q", nodeGroup.MachineConfigPoolSelector.String())
 		}
-
 		result = append(result, Tree{
 			NodeGroup:          nodeGroup,
 			MachineConfigPools: treeMCPs,
@@ -82,7 +119,7 @@ func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup)
 }
 
 func FindMachineConfigPools(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]*mcov1.MachineConfigPool, error) {
-	trees, err := FindTrees(mcps, nodeGroups)
+	trees, err := FindTreesOpenshift(mcps, nodeGroups)
 	if err != nil {
 		return nil, err
 	}

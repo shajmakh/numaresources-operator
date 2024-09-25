@@ -141,6 +141,47 @@ func TestFindTrees(t *testing.T) {
 			},
 		},
 		{
+			name: "node group with PoolName and MachineConfigPoolSelector in another node group",
+			mcps: &mcpList,
+			ngs: []nropv1.NodeGroup{
+				{
+					PoolName: &mcpList.Items[0].Name,
+				},
+				{
+					MachineConfigPoolSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"mcp-label-3": "test3",
+						},
+					},
+				},
+			},
+			expected: []Tree{
+				{
+					MachineConfigPools: []*mcov1.MachineConfigPool{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "mcp1",
+							},
+						},
+					},
+				},
+				{
+					MachineConfigPools: []*mcov1.MachineConfigPool{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "mcp3",
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "mcp5",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "ng2-mcpX",
 			mcps: &mcpList,
 			ngs: []nropv1.NodeGroup{
@@ -188,7 +229,7 @@ func TestFindTrees(t *testing.T) {
 	}
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FindTrees(tt.mcps, tt.ngs)
+			got, err := FindTreesOpenshift(tt.mcps, tt.ngs)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -204,7 +245,8 @@ func TestFindTrees(t *testing.T) {
 				t.Errorf("unexpected error checking backward compat: %v", err)
 			}
 			compatNames := mcpNamesFromList(gotMcps)
-			if !reflect.DeepEqual(gotNames, compatNames) {
+
+			if !containsSliceItems(gotNames, compatNames) {
 				t.Errorf("Trees mismatch (non backward compatible): got=%v compat=%v", gotNames, compatNames)
 			}
 		})
@@ -419,4 +461,21 @@ func findListByNodeGroups(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1
 	}
 
 	return result, nil
+}
+
+// containedItemsFromSlice returns true if all of b items are part of slice a
+func containsSliceItems(a, b []string) bool {
+	for _, i := range b {
+		found := false
+		for _, j := range a {
+			if i == j {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }

@@ -37,3 +37,10 @@ func TestGetComponentName(t *testing.T) {
 		t.Errorf("generated empty ComponentName")
 	}
 }
+
+func TestExtractAssociatedNameFromRTEDaemonset(t *testing.T) {
+	got := ExtractPoolNameFromRTEDaemonset("bar-foo-foobar", "bar")
+	if got != "foo-foobar" {
+		t.Errorf("expected \"foo-foobar\" got %s", got)
+	}
+}

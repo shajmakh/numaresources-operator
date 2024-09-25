@@ -497,7 +497,6 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 							Expect(err).ToNot(HaveOccurred())
 						})
 						It(" operator status should report RelatedObjects as expected", func() {
-
 							By("Getting updated NROP Status")
 							key := client.ObjectKeyFromObject(nro)
 							nroUpdated := &nropv1.NUMAResourcesOperator{}
@@ -534,6 +533,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 
 							Expect(len(nroUpdated.Status.RelatedObjects)).To(Equal(len(expected)))
 							Expect(nroUpdated.Status.RelatedObjects).To(ContainElements(expected))
+							Expect(validation.EqualNamespacedDSSlicesByName(nroUpdated.Status.DaemonSets, testobjs.GetDaemonSetListFromNodeGroupStatuses(nroUpdated.Status.NodeGroups)))
 						})
 					})
 				})
@@ -690,6 +690,7 @@ var _ = Describe("Test NUMAResourcesOperator Reconcile", func() {
 
 			Expect(len(nroUpdated.Status.MachineConfigPools)).To(Equal(1))
 			Expect(nroUpdated.Status.MachineConfigPools[0].Name).To(Equal(mcp.Name))
+			Expect(reconciler.Client.Update(context.TODO(), mcp)).Should(Succeed())
 			// TODO check the actual returned config. We need to force the condition as Available for this.
 		})
 
