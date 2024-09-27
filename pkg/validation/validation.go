@@ -59,11 +59,15 @@ func MachineConfigPoolDuplicates(trees []nodegroupv1.Tree) error {
 // NodeGroups validates the node groups for nil values and duplicates.
 // TODO: move it under the validation webhook once we will have one
 func NodeGroups(nodeGroups []nropv1.NodeGroup) error {
-	if err := nodeGroupsMachineConfigPoolSelector(nodeGroups); err != nil {
+	if err := nodeGroupPools(nodeGroups); err != nil {
 		return err
 	}
 
-	if err := nodeGroupsDuplicates(nodeGroups); err != nil {
+	if err := nodeGroupsDuplicatesByMCPSelector(nodeGroups); err != nil {
+		return err
+	}
+
+	if err := nodeGroupsDuplicatesByPoolName(nodeGroups); err != nil {
 		return err
 	}
 
@@ -75,10 +79,13 @@ func NodeGroups(nodeGroups []nropv1.NodeGroup) error {
 }
 
 // TODO: move it under the validation webhook once we will have one
-func nodeGroupsMachineConfigPoolSelector(nodeGroups []nropv1.NodeGroup) error {
+func nodeGroupPools(nodeGroups []nropv1.NodeGroup) error {
 	for _, nodeGroup := range nodeGroups {
-		if nodeGroup.MachineConfigPoolSelector == nil {
-			return fmt.Errorf("one of the node groups does not have machineConfigPoolSelector")
+		if nodeGroup.MachineConfigPoolSelector == nil && nodeGroup.PoolName == nil {
+			return fmt.Errorf("one of the node groups does not set a pool specifier")
+		}
+		if nodeGroup.MachineConfigPoolSelector != nil && nodeGroup.PoolName != nil {
+			return fmt.Errorf("one of the node groups specify more than one pool specifier while only one is allowed")
 		}
 	}
 
@@ -86,7 +93,7 @@ func nodeGroupsMachineConfigPoolSelector(nodeGroups []nropv1.NodeGroup) error {
 }
 
 // TODO: move it under the validation webhook once we will have one
-func nodeGroupsDuplicates(nodeGroups []nropv1.NodeGroup) error {
+func nodeGroupsDuplicatesByMCPSelector(nodeGroups []nropv1.NodeGroup) error {
 	duplicates := map[string]int{}
 	for _, nodeGroup := range nodeGroups {
 		if nodeGroup.MachineConfigPoolSelector == nil {
@@ -104,6 +111,35 @@ func nodeGroupsDuplicates(nodeGroups []nropv1.NodeGroup) error {
 	for selector, count := range duplicates {
 		if count > 1 {
 			duplicateErrors = append(duplicateErrors, fmt.Sprintf("the node group with the machineConfigPoolSelector %q has duplicates", selector))
+		}
+	}
+
+	if len(duplicateErrors) > 0 {
+		return errors.New(strings.Join(duplicateErrors, "; "))
+	}
+
+	return nil
+}
+
+// TODO: move it under the validation webhook once we will have one
+func nodeGroupsDuplicatesByPoolName(nodeGroups []nropv1.NodeGroup) error {
+	duplicates := map[string]int{}
+	for _, nodeGroup := range nodeGroups {
+		if nodeGroup.PoolName == nil {
+			continue
+		}
+
+		key := *nodeGroup.PoolName
+		if _, ok := duplicates[key]; !ok {
+			duplicates[key] = 0
+		}
+		duplicates[key] += 1
+	}
+
+	var duplicateErrors []string
+	for name, count := range duplicates {
+		if count > 1 {
+			duplicateErrors = append(duplicateErrors, fmt.Sprintf("the pool name %q has duplicates", name))
 		}
 	}
 
