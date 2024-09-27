@@ -265,11 +265,13 @@ func (r *NUMAResourcesOperatorReconciler) reconcileResource(ctx context.Context,
 		if done, res, cond, err := r.reconcileResourceMachineConfig(ctx, instance, trees); done {
 			return res, cond, err
 		}
+		instance.Status.NodeGroups = syncNodeGroupsStatusPerMCPWithOperatorStatus(instance)
 	}
 
 	if done, res, cond, err := r.reconcileResourceDaemonSet(ctx, instance, trees); done {
 		return res, cond, err
 	}
+	instance.Status.NodeGroups = syncNodeGroupsStatusesDaemonSets(instance)
 
 	return ctrl.Result{}, status.ConditionAvailable, nil
 }
@@ -293,6 +295,30 @@ func (r *NUMAResourcesOperatorReconciler) syncDaemonSetsStatuses(ctx context.Con
 		dsStatuses = append(dsStatuses, nname)
 	}
 	return dsStatuses, true, nil
+}
+
+func syncNodeGroupsStatusPerMCPWithOperatorStatus(instance *nropv1.NUMAResourcesOperator) []nropv1.NodeGroupStatus {
+	ngStatuses := []nropv1.NodeGroupStatus{}
+	for _, mcp := range instance.Status.MachineConfigPools {
+		cfg := mcp.Config.DeepCopy()
+		ngStatuses = append(ngStatuses, nropv1.NodeGroupStatus{PoolName: mcp.Name, Config: cfg})
+	}
+	return ngStatuses
+}
+
+func syncNodeGroupsStatusesDaemonSets(instance *nropv1.NUMAResourcesOperator) []nropv1.NodeGroupStatus {
+	for _, ds := range instance.Status.DaemonSets {
+		copyOfDS := ds.DeepCopy()
+		extractedPoolName := objectnames.ExtractPoolNameFromRTEDaemonset(copyOfDS.Name, instance.Name)
+
+		for idx, ng := range instance.Status.NodeGroups {
+			if ng.PoolName == extractedPoolName {
+				instance.Status.NodeGroups[idx].DaemonSet = copyOfDS
+				break
+			}
+		}
+	}
+	return instance.Status.NodeGroups
 }
 
 func (r *NUMAResourcesOperatorReconciler) syncNodeResourceTopologyAPI(ctx context.Context) (bool, error) {

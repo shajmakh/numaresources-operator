@@ -19,6 +19,8 @@ package validation
 import (
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -167,5 +169,18 @@ func nodeGroupMachineConfigPoolSelector(nodeGroups []nropv1.NodeGroup) error {
 		return errors.New(strings.Join(selectorsErrors, "; "))
 	}
 
+	return nil
+}
+
+// EqualNamespacedDSSlicesByName validates two slices of type NamespacedName are equal in Names
+func EqualNamespacedDSSlicesByName(s1, s2 []nropv1.NamespacedName) error {
+	sort.SliceStable(s1, func(i, j int) bool { return s1[i].Name > s1[j].Name })
+	sort.SliceStable(s2, func(i, j int) bool { return s2[i].Name > s2[j].Name })
+	equal := slices.EqualFunc(s1, s2, func(a nropv1.NamespacedName, b nropv1.NamespacedName) bool {
+		return a.Name == b.Name
+	})
+	if !equal {
+		return fmt.Errorf("expected RTE daemonsets are different from actual daemonsets")
+	}
 	return nil
 }
