@@ -137,14 +137,22 @@ func (r *NUMAResourcesOperatorReconciler) Reconcile(ctx context.Context, req ctr
 		return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
 	}
 
-	trees, err := getTreesByNodeGroup(ctx, r.Client, instance.Spec.NodeGroups)
+	trees, err := getTreesByNodeGroup(ctx, r.Client, instance.Spec.NodeGroups, r.Platform)
 	if err != nil {
 		return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
 	}
 
-	if err := validation.MachineConfigPoolDuplicates(trees); err != nil {
+	if err := validation.SourcePoolDuplicates(trees); err != nil {
 		return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
 	}
+
+	if r.Platform == platform.OpenShift {
+		if err := validation.MachineConfigPoolDuplicates(trees); err != nil {
+			return r.updateStatus(ctx, instance, status.ConditionDegraded, validation.NodeGroupsError, err.Error())
+		}
+	}
+
+	// no need to validate duplicates for NodePoolSelector as it is 1:1 relation with NodeGroup.PoolName
 
 	for idx := range trees {
 		conf := trees[idx].NodeGroup.NormalizeConfig()
@@ -791,10 +799,20 @@ func isDaemonSetReady(ds *appsv1.DaemonSet) bool {
 	return ok
 }
 
-func getTreesByNodeGroup(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroup) ([]nodegroupv1.Tree, error) {
-	mcps := &machineconfigv1.MachineConfigPoolList{}
-	if err := cli.List(ctx, mcps); err != nil {
-		return nil, err
+func getTreesByNodeGroup(ctx context.Context, cli client.Client, nodeGroups []nropv1.NodeGroup, platf platform.Platform) ([]nodegroupv1.Tree, error) {
+	if platf == platform.OpenShift {
+		mcps := &machineconfigv1.MachineConfigPoolList{}
+		if err := cli.List(ctx, mcps); err != nil {
+			return nil, err
+		}
+		return nodegroupv1.FindTreesOpenshift(mcps, nodeGroups)
 	}
-	return nodegroupv1.FindTrees(mcps, nodeGroups)
+
+	if platf == platform.HostedControlPlane {
+		// no need to pass MCPs nor nodes of the hosted cluster. no need to verify if
+		// there are nodes with this label (same applies to OCP as we do not verify if there are nodes under the MCP).
+		return nodegroupv1.FindTreesHCP(nodeGroups), nil
+	}
+
+	return nil, fmt.Errorf("unsupported platform")
 }

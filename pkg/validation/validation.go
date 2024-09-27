@@ -184,3 +184,12 @@ func EqualNamespacedDSSlicesByName(s1, s2 []nropv1.NamespacedName) error {
 	}
 	return nil
 }
+
+func SourcePoolDuplicates(trees []nodegroupv1.Tree) error {
+	for _, tree := range trees {
+		if tree.NodePoolSelector != nil && len(tree.MachineConfigPools) != 0 {
+			return fmt.Errorf("expected one pool source but detected two: NodePoolSelector: %q / MachineConfigPools %+v", tree.NodePoolSelector, tree.MachineConfigPools)
+		}
+	}
+	return nil
+}

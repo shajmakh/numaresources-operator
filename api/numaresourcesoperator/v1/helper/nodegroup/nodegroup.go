@@ -28,6 +28,8 @@ import (
 	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
 )
 
+const NodePoolLabelHCP = "hypershift.openshift.io/node-pool"
+
 // Tree maps a NodeGroup to the MachineConfigPool identified by the NodeGroup's MCPSelector.
 // It is meant to use internally to bind the two concepts. Should be never exposed to users - hence
 // it has not nor must have a JSON mapping.
@@ -38,6 +40,7 @@ import (
 type Tree struct {
 	NodeGroup          *nropv1.NodeGroup
 	MachineConfigPools []*mcov1.MachineConfigPool
+	NodePoolSelector   *metav1.LabelSelector
 }
 
 // Clone creates a deepcopy of a Tree
@@ -45,11 +48,35 @@ func (ttr Tree) Clone() Tree {
 	ret := Tree{
 		NodeGroup:          ttr.NodeGroup.DeepCopy(),
 		MachineConfigPools: make([]*mcov1.MachineConfigPool, 0, len(ttr.MachineConfigPools)),
+		NodePoolSelector:   ttr.NodePoolSelector.DeepCopy(),
 	}
 	for _, mcp := range ttr.MachineConfigPools {
 		ret.MachineConfigPools = append(ret.MachineConfigPools, mcp.DeepCopy())
 	}
 	return ret
+}
+
+func FindTreesHCP(nodeGroups []nropv1.NodeGroup) []Tree {
+	// node groups are validated by the controller before getting to this phase, so for sure all node groups will be valid at this point.
+	// a valid node group has either PoolName OR MachineConfigPoolSelector, not both, and since this is called in a HCP platfrom environment we know we are working only with PoolName's
+	var result []Tree
+	for idx := range nodeGroups {
+		nodeGroup := &nodeGroups[idx] // shortcut
+
+		if nodeGroup.PoolName == nil {
+			continue
+		}
+
+		result = append(result, Tree{
+			NodeGroup: nodeGroup,
+			NodePoolSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					NodePoolLabelHCP: *nodeGroup.PoolName,
+				},
+			},
+		})
+	}
+	return result
 }
 
 // FindTrees binds the provided mcps from their list to the given nodegroups.
@@ -58,9 +85,9 @@ func (ttr Tree) Clone() Tree {
 // Unfortunately this is with very, very high probability a refactoring mistake which slipped in unchecked.
 // One of the key design assumptions in NROP is the 1:1 mapping between NodeGroups and MCPs.
 // This historical accident should be fixed in future versions.
-func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]Tree, error) {
+func FindTreesOpenshift(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]Tree, error) {
 	// node groups are validated by the controller before getting to this phase, so for sure all node groups will be valid at this point.
-	// a valid node group has either PoolName OR MachineConfigPoolSelector, not both. Getting hear means operator is deployed on Openshift thus processing MCPs
+	// a valid node group has either PoolName OR MachineConfigPoolSelector, not both. Getting here means operator is deployed on Openshift thus processing MCPs
 	var result []Tree
 	for idx := range nodeGroups {
 		nodeGroup := &nodeGroups[idx] // shortcut
@@ -110,7 +137,7 @@ func FindTrees(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup)
 
 // FindMachineConfigPools returns a slice of all the MachineConfigPool matching the configured node groups
 func FindMachineConfigPools(mcps *mcov1.MachineConfigPoolList, nodeGroups []nropv1.NodeGroup) ([]*mcov1.MachineConfigPool, error) {
-	trees, err := FindTrees(mcps, nodeGroups)
+	trees, err := FindTreesOpenshift(mcps, nodeGroups)
 	if err != nil {
 		return nil, err
 	}

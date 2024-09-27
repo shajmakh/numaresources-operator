@@ -229,7 +229,7 @@ func TestFindTrees(t *testing.T) {
 	}
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FindTrees(tt.mcps, tt.ngs)
+			got, err := FindTreesOpenshift(tt.mcps, tt.ngs)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -407,6 +407,54 @@ func TestFindMachineConfigPools(t *testing.T) {
 	}
 }
 
+func TestFindTreesHCP(t *testing.T) {
+	var (
+		pname1 = "pn-1"
+		pname2 = "pn-2"
+		pname3 = "pn-3"
+	)
+	input := []nropv1.NodeGroup{
+		{
+			PoolName: &pname1,
+		},
+		{
+			PoolName: &pname2,
+		},
+		{
+			PoolName: &pname3,
+		},
+	}
+	expected := []Tree{
+		{
+			NodePoolSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					NodePoolLabelHCP: pname1,
+				},
+			},
+		},
+		{
+			NodePoolSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					NodePoolLabelHCP: pname2,
+				},
+			},
+		},
+		{
+			NodePoolSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					NodePoolLabelHCP: pname3,
+				},
+			},
+		},
+	}
+	got := FindTreesHCP(input)
+	gotSelectorsList := nodePoolSelectorsFromTree(got)
+	expectedSelectorsList := nodePoolSelectorsFromTree(expected)
+	if !reflect.DeepEqual(gotSelectorsList, expectedSelectorsList) {
+		t.Errorf("Trees mismatch: got=%+v expected=%+v", got, expected)
+	}
+}
+
 func mcpNamesFromTrees(trees []Tree) []string {
 	var result []string
 	for _, tree := range trees {
@@ -477,4 +525,15 @@ func containsSliceItems(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func nodePoolSelectorsFromTree(trees []Tree) []metav1.LabelSelector {
+	var result []metav1.LabelSelector
+	for _, tree := range trees {
+		if tree.NodePoolSelector == nil {
+			continue
+		}
+		result = append(result, *tree.NodePoolSelector)
+	}
+	return result
 }
