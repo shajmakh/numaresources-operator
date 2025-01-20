@@ -39,12 +39,9 @@ import (
 	nropv1 "github.com/openshift-kni/numaresources-operator/api/numaresourcesoperator/v1"
 	"github.com/openshift-kni/numaresources-operator/pkg/status"
 	machineconfigv1 "github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1"
-
 	inthelper "github.com/openshift-kni/numaresources-operator/internal/api/annotations/helper"
-	nropmcp "github.com/openshift-kni/numaresources-operator/internal/machineconfigpools"
 	nrowait "github.com/openshift-kni/numaresources-operator/internal/wait"
-	"github.com/openshift-kni/numaresources-operator/internal/workarounds"
-
+	nropmcp "github.com/openshift-kni/numaresources-operator/internal/machineconfigpools"
 	e2eclient "github.com/openshift-kni/numaresources-operator/test/utils/clients"
 	"github.com/openshift-kni/numaresources-operator/test/utils/configuration"
 	"github.com/openshift-kni/numaresources-operator/test/utils/crds"
@@ -60,16 +57,12 @@ const (
 	containerNameRTE = "resource-topology-exporter"
 )
 
-var _ = Describe("[Install] continuousIntegration", Serial, func() {
+var _ = Describe("[Install] continuousIntegration", func() {
 	var initialized bool
-	var wrs []workarounds.Interface
 
 	BeforeEach(func() {
 		if !initialized {
 			Expect(e2eclient.ClientsEnabled).To(BeTrue(), "failed to create runtime-controller client")
-			wrs = append(wrs, workarounds.ForPrometheus())
-
-			applyWorkarounds(wrs)
 		}
 		initialized = true
 	})
@@ -155,14 +148,10 @@ var _ = Describe("[Install] continuousIntegration", Serial, func() {
 
 var _ = Describe("[Install] durability", Serial, func() {
 	var initialized bool
-	var wrs []workarounds.Interface
 
 	BeforeEach(func() {
 		if !initialized {
 			Expect(e2eclient.ClientsEnabled).To(BeTrue(), "failed to create runtime-controller client")
-			wrs = append(wrs, workarounds.ForPrometheus())
-
-			applyWorkarounds(wrs)
 		}
 		initialized = true
 	})
@@ -449,21 +438,5 @@ func logRTEPodsLogs(cli client.Client, k8sCli *kubernetes.Clientset, ctx context
 			}
 			klog.Infof("DaemonSet %s/%s -> Pod %s/%s -> logs:\n%s\n-----\n", ds.Namespace, ds.Name, pod.Namespace, pod.Name, logs)
 		}
-	}
-}
-
-func applyWorkarounds(wrs []workarounds.Interface) {
-	GinkgoHelper()
-
-	if len(wrs) == 0 {
-		return // nothing to do
-	}
-
-	ctx := context.Background()
-
-	By(fmt.Sprintf("applying %d workarounds", len(wrs)))
-	for idx, wr := range wrs {
-		By(fmt.Sprintf("%02d: %s (%s)", idx, wr.Describe(), wr.IssueReference()))
-		Expect(wr.Apply(ctx, e2eclient.Client)).To(Succeed())
 	}
 }
