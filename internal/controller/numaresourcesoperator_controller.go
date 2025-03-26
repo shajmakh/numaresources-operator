@@ -19,12 +19,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	apiextensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -544,7 +546,106 @@ func (r *NUMAResourcesOperatorReconciler) syncNUMAResourcesOperatorResources(ctx
 	// SCC v2 needs no updates
 
 	existing = existing.WithManifestsUpdater(func(poolName string, gdm *rtestate.GeneratedDesiredManifest) error {
-		err := daemonsetUpdater(poolName, gdm)
+		//workernodenames := []string{}
+		//if poolName == "worker" && r.Platform == platform.OpenShift {
+		//	klog.InfoS("RTE_WORKER_ISOLATION", "________________________________________", "START")
+		//	// get the object by name=poolname=worker
+		//	workermcp := machineconfigv1.MachineConfigPool{}
+		//	if err := r.Client.Get(ctx, client.ObjectKey{Name: poolName}, &workermcp); err != nil {
+		//		klog.ErrorS(err, "RTE_WORKER_ISOLATION Failed to get MachineConfigPool", "poolName", poolName)
+		//		return err
+		//	}
+		//	//// list nodes associated to that pool
+		//	//mcol := mcpLister{Cli: r.Client}
+		//	//nodel := nodelister{Cli: r.Client}
+		//	//mcolister.GetNodesForPool(mcol, nodel, &mcp)
+		//
+		//	//list worker nodes
+		//	//if schedulable masters is enabled the masters will also be part of the ditry set
+		//	dirtyworkernodes, err := machineconfigpools.GetNodesFrom(ctx, r.Client, &workermcp)
+		//	if err != nil {
+		//		klog.ErrorS(err, "RTE_WORKER_ISOLATION Failed to get nodes from MachineConfigPool", "poolName", poolName)
+		//		return err
+		//	}
+		//	dirtynodesnames := objectnames.Nodes(dirtyworkernodes)
+		//	dirtyset := sets.New[string](dirtynodesnames...)
+		//
+		//	// list all mcps
+		//	allmcps := machineconfigv1.MachineConfigPoolList{}
+		//	if err := r.Client.List(ctx, &allmcps); err != nil {
+		//		klog.ErrorS(err, "RTE_WORKER_ISOLATION Failed to list MachineConfigPools", "poolName", poolName)
+		//		return err
+		//	}
+		//
+		//	for _, mcp := range allmcps.Items {
+		//		klog.InfoS("RTE_WORKER_ISOLATION in loop", "mcp", mcp.Name)
+		//		if mcp.Name == "worker" {
+		//			continue
+		//		}
+		//		mcpnodes, err := machineconfigpools.GetNodesFrom(ctx, r.Client, &mcp)
+		//		if err != nil {
+		//			return err
+		//		}
+		//		mcpnodesnames := objectnames.Nodes(mcpnodes)
+		//		klog.InfoS("RTE_WORKER_ISOLATION names before modification", "currentmcps", mcpnodesnames, "worker set so far", dirtyset)
+		//		//namesset := sets.New[string](mcpnodesnames...)
+		//		// filter nodes such that if they match to any of the remaining mcps they should be popes out of the nodes list
+		//		dirtyset = dirtyset.Delete(mcpnodesnames...)
+		//		klog.InfoS("RTE_WORKER_ISOLATION names AFTER modification", "currentmcps", mcpnodesnames, "worker set so far", dirtyset)
+		//
+		//	}
+		//	workernodenames = dirtyset.UnsortedList()
+		//
+		//	klog.InfoS("RTE_WORKER_ISOLATION ________________________________________ END", "finalres", workernodenames)
+		//
+		//} else {
+		//	klog.InfoS("RTE_WORKER_ISOLATION ________________________________________ DIDNT EVEN START!", "poolname", poolName, "platform", r.Platform)
+		//}
+		// the remaining nodes are those that are associated to worker
+
+		labelstoskip := []labelValue{}
+		if poolName == "worker" && r.Platform == platform.OpenShift {
+			klog.InfoS("RTE_WORKER_ISOLATION", "________________________________________", "START")
+			// list all mcps
+			allmcps := machineconfigv1.MachineConfigPoolList{}
+			if err := r.Client.List(ctx, &allmcps); err != nil {
+				klog.ErrorS(err, "RTE_WORKER_ISOLATION Failed to list MachineConfigPools", "poolName", poolName)
+				return err
+			}
+
+			workernsasmap := map[string]string{}
+			for _, mcp := range allmcps.Items {
+				klog.InfoS("RTE_WORKER_ISOLATION in loop", "mcp", mcp.Name)
+				if mcp.Name == "worker" {
+					workernsasmap, _ = metav1.LabelSelectorAsMap(mcp.Spec.NodeSelector)
+					continue
+				}
+				nsAsMap, err := metav1.LabelSelectorAsMap(mcp.Spec.NodeSelector)
+				if err != nil {
+					klog.InfoS("RTE_WORKER_ISOLATION in loop", "errorconvertingtomap", err)
+					return err
+				}
+
+				//remove worker nodeselectors to avoid conflict with DS nodeselector
+				for wrkk, wrkv := range workernsasmap {
+					maps.DeleteFunc(nsAsMap, func(k, v string) bool {
+						return (k == wrkk && v == wrkv)
+					})
+				}
+
+				klog.InfoS("RTE_WORKER_ISOLATION before modification", "labelsToSkip", labelstoskip)
+				labelstoskip = append(labelstoskip, flattenmap(nsAsMap)...)
+				klog.InfoS("RTE_WORKER_ISOLATION  AFTER modification", "labelsToSkip", labelstoskip)
+
+			}
+
+			klog.InfoS("RTE_WORKER_ISOLATION ________________________________________ END", "finalres", labelstoskip)
+
+		} else {
+			klog.InfoS("RTE_WORKER_ISOLATION ________________________________________ DIDNT EVEN START!", "poolname", poolName, "platform", r.Platform)
+		}
+
+		err := daemonsetUpdater(poolName, labelstoskip, gdm)
 		if err != nil {
 			return err
 		}
@@ -576,6 +677,19 @@ func (r *NUMAResourcesOperatorReconciler) syncNUMAResourcesOperatorResources(ctx
 		klog.Warningf("daemonset and tree size mismatch: expected %d got in daemonsets %d", len(trees), len(dsPoolPairs))
 	}
 	return dsPoolPairs, nil
+}
+
+func flattenmap(asMap map[string]string) []labelValue {
+	res := []labelValue{}
+	for k, v := range asMap {
+		res = append(res, labelValue{k, v})
+	}
+	return res
+}
+
+type labelValue struct {
+	label string
+	value string
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -715,7 +829,37 @@ func validateMachineConfigLabels(mc client.Object, trees []nodegroupv1.Tree) err
 	return nil
 }
 
-func daemonsetUpdater(poolName string, gdm *rtestate.GeneratedDesiredManifest) error {
+func daemonsetUpdater(poolName string, labelsToSkip []labelValue, gdm *rtestate.GeneratedDesiredManifest) error {
+	if len(labelsToSkip) != 0 {
+		valuestoskip := []corev1.NodeSelectorRequirement{}
+		for _, pair := range labelsToSkip {
+			tmp := corev1.NodeSelectorRequirement{
+				Key:      pair.label,
+				Operator: corev1.NodeSelectorOpNotIn,
+				Values:   []string{pair.value},
+			}
+			valuestoskip = append(valuestoskip, tmp)
+		}
+		klog.InfoS("RTE_WORKER_ISOLATION", "values to skip", valuestoskip)
+		// TODO check if affinity is not nil if not only override the nodeaffinity
+		affinity := &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: valuestoskip,
+						},
+					},
+				},
+			},
+		}
+		gdm.DaemonSet.Spec.Template.Spec.Affinity = affinity
+		klog.InfoS("RTE_WORKER_ISOLATION", "ds", gdm.DaemonSet.String())
+
+	} else {
+		klog.InfoS("RTE_WORKER_ISOLATION no affinity needed")
+	}
+
 	rteupdate.DaemonSetTolerations(gdm.DaemonSet, gdm.NodeGroup.Config.Tolerations)
 
 	err := rteupdate.DaemonSetArgs(gdm.DaemonSet, *gdm.NodeGroup.Config)
@@ -775,4 +919,9 @@ func getTreesByNodeGroup(ctx context.Context, cli client.Client, nodeGroups []nr
 	default:
 		return nil, fmt.Errorf("unsupported platform")
 	}
+}
+
+func temptotest(s, d sets.Set[string]) []string {
+	s = s.Delete(d.UnsortedList()...)
+	return s.UnsortedList()
 }

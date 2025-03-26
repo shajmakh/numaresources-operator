@@ -20,6 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"reflect"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -2329,4 +2332,32 @@ func findFileInIgnition(mc *machineconfigv1.MachineConfig, filePath string) (boo
 		}
 	}
 	return false, nil
+}
+
+func Test_tempfortest(t *testing.T) {
+	type args struct {
+		dirtyset sets.Set[string]
+		namesset sets.Set[string]
+	}
+	tests := []struct {
+		name string
+		args args
+		want []string
+	}{
+		{
+			name: "master is enabled",
+			args: args{
+				dirtyset: sets.New[string]([]string{"wrk", "wrk-1", "mas", "mas-1", "wrk-cnf"}...),
+				namesset: sets.New[string]([]string{"mas", "mas-1", "wrk-cnf"}...),
+			},
+			want: []string{"wrk", "wrk-1", "wrk-cnf"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := temptotest(tt.args.dirtyset, tt.args.namesset); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("tempfortest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
