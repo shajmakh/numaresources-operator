@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/openshift-kni/numaresources-operator/internal/podlist"
 	"reflect"
 	"sort"
 	"strings"
@@ -230,6 +231,10 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 
 		Context("modify the configurable values under the NUMAResourcesScheduler CR", func() {
 			initialNroSchedObj := &nropv1.NUMAResourcesScheduler{}
+			schedulerConfigMapKey := client.ObjectKey{
+				Name:      "topo-aware-scheduler-config",
+				Namespace: initialNroSchedObj.Status.Deployment.Namespace,
+			}
 
 			BeforeEach(func() {
 				initialNroSchedObj = nrosched.CheckNROSchedulerAvailable(context.TODO(), fxt.Client, serialconfig.Config.NROSchedObj.Name)
@@ -975,6 +980,23 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 		})
 	})
 })
+
+func verifyPodsAreRestarted(old []corev1.Pod, new []corev1.Pod) {
+	oldNames := getPodsNames(old)
+	newNames := getPodsNames(new)
+
+	for _, oname := range oldNames {
+		Expect(newNames).ToNot(ContainElement(oname))
+	}
+}
+
+func getPodsNames(pods []corev1.Pod) []string {
+	names := make([]string, len(pods))
+	for i, pod := range pods {
+		names[i] = pod.Name
+	}
+	return names
+}
 
 func mutateNodeCustomLabel(nodes []corev1.Node) (*corev1.Node, *corev1.Node, string) {
 	targetNode := nodeWithoutCustomRole(nodes)

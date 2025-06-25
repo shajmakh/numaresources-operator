@@ -19,6 +19,12 @@ package sched
 import (
 	"context"
 	"fmt"
+	"github.com/openshift-kni/numaresources-operator/api/v1/helper/namespacedname"
+	"github.com/openshift-kni/numaresources-operator/test/e2e/label"
+	serialconfig "github.com/openshift-kni/numaresources-operator/test/e2e/serial/config"
+	"github.com/openshift-kni/numaresources-operator/test/internal/nrosched"
+	operatorv1 "github.com/openshift/api/operator/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -299,5 +305,109 @@ var _ = Describe("[Scheduler] imageReplacement", func() {
 				Expect(pod.UID).ToNot(Equal(uid), "new scheduler pod has not been created")
 			}
 		})
+
+		It("should be able to modify scheduler image ", Label(label.Tier2, "schedrst"), Label("feature:schedrst"), func() {
+			nrs := nroSchedObj.DeepCopy()
+
+			By(fmt.Sprintf("modifying the NUMAResourcesScheduler spec.imageSpec field to %q", serialconfig.SchedulerTestCIImage))
+			Eventually(func(g Gomega) {
+				//updates must be done on object.Spec and active values should be fetched from object.Status
+				err := e2eclient.Client.Get(context.TODO(), client.ObjectKeyFromObject(nrs), nroSchedObj)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				nroSchedObj.Spec.SchedulerImage = serialconfig.SchedulerTestCIImage
+				err = e2eclient.Client.Update(context.TODO(), nroSchedObj)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithTimeout(10 * time.Minute).WithPolling(30 * time.Second).Should(Succeed())
+
+			By("verify scheduler is available")
+			updatedNRS := nrosched.CheckNROSchedulerAvailable(context.TODO(), e2eclient.Client, nroSchedObj.Name)
+			Expect(updatedNRS).ToNot(BeNil())
+
+			By("verify scheduler image is updated")
+			var schedulerdp appsv1.Deployment
+			err := e2eclient.Client.Get(context.TODO(), namespacedname.AsObjectKey(updatedNRS.Status.Deployment), &schedulerdp)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(schedulerdp.Spec.Template.Spec.Containers[0].Image).To(Equal(serialconfig.SchedulerTestCIImage))
+		})
+
+		It("should be able to modify scheduler loglevel ", Label(label.Tier2, "schedrst"), Label("feature:schedrst"), func() {
+			nroSchedObj := initialNroSchedObj.DeepCopy()
+
+			newLogLevel := operatorv1.LogLevel("Debug")
+			logLevelArg := "-v=4"
+			if nroSchedObj.Spec.LogLevel == newLogLevel {
+				newLogLevel = "Trace"
+				logLevelArg = "-v=6"
+
+			}
+
+			By(fmt.Sprintf("modifying the NUMAResourcesScheduler spec.loglevel field to %q", newLogLevel))
+			Eventually(func(g Gomega) {
+				//updates must be done on object.Spec and active values should be fetched from object.Status
+				err := fxt.Client.Get(context.TODO(), client.ObjectKeyFromObject(initialNroSchedObj), nroSchedObj)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				nroSchedObj.Spec.LogLevel = newLogLevel
+				err = fxt.Client.Update(context.TODO(), nroSchedObj)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithTimeout(10 * time.Minute).WithPolling(30 * time.Second).Should(Succeed())
+
+			By("verify scheduler is available")
+			updatedNRS := nrosched.CheckNROSchedulerAvailable(context.TODO(), fxt.Client, nroSchedObj.Name)
+			Expect(updatedNRS).ToNot(BeNil())
+
+			By("verify scheduler log level is updated")
+			var schedulerdp appsv1.Deployment
+			err := fxt.Client.Get(context.TODO(), namespacedname.AsObjectKey(updatedNRS.Status.Deployment), &schedulerdp)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(schedulerdp.Spec.Template.Spec.Containers[0].Args).To(ContainElement(logLevelArg))
+		})
+
+		It("should be able to modify scheduler CacheResyncPeriod", Label(label.Tier2, "schedrst"), Label("feature:schedrst"), func() {
+			nroSchedObj := initialNroSchedObj.DeepCopy()
+			replicas := nroSchedObj.Spec.Replicas
+
+			klog.Infof("save the initial pods for later to verify pods restarts")
+			var schedulerdp appsv1.Deployment
+			err := fxt.Client.Get(context.TODO(), namespacedname.AsObjectKey(nroSchedObj.Status.Deployment), &schedulerdp)
+			Expect(err).ToNot(HaveOccurred())
+			initialPods, err := podlist.With(fxt.Client).ByDeployment(context.TODO(), schedulerdp)
+			Expect(err).ToNot(HaveOccurred(), "Unable to get pods from Deployment %q:  %v", schedulerdp.Name, err)
+			Expect(len(initialPods)).To(Equal(replicas), "cannot find correct amount of pods for DP %s/%s", schedulerdp.Namespace, schedulerdp.Name)
+
+			newValue := metav1.Duration{Duration: 12 * time.Second}
+			if *nroSchedObj.Spec.CacheResyncPeriod == newValue {
+				newValue = metav1.Duration{Duration: 10 * time.Second}
+			}
+
+			By(fmt.Sprintf("modifying the NUMAResourcesScheduler spec.CacheResyncPeriod field to %q", newValue))
+			Eventually(func(g Gomega) {
+				//updates must be done on object.Spec and active values should be fetched from object.Status
+				err := fxt.Client.Get(context.TODO(), client.ObjectKeyFromObject(initialNroSchedObj), nroSchedObj)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				nroSchedObj.Spec.CacheResyncPeriod = &newValue
+				err = fxt.Client.Update(context.TODO(), nroSchedObj)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithTimeout(10 * time.Minute).WithPolling(30 * time.Second).Should(Succeed())
+
+			By("verify scheduler is available")
+			updatedNRS := nrosched.CheckNROSchedulerAvailable(context.TODO(), fxt.Client, nroSchedObj.Name)
+			Expect(updatedNRS).ToNot(BeNil())
+
+			By("verify scheduler CacheResyncPeriod is updated")
+			Expect(updatedNRS.Status.CacheResyncPeriod).To(Equal(&newValue))
+
+			By("verify scheduler config map is updated")
+
+			schedulerConfigMapKey
+			By("verify scheduler pods were restarted")
+			newPods, err := podlist.With(fxt.Client).ByDeployment(context.TODO(), schedulerdp)
+			Expect(err).ToNot(HaveOccurred(), "Unable to get pods from Deployment %q:  %v", schedulerdp.Name, err)
+			Expect(len(newPods)).To(Equal(replicas), "cannot find correct amount of pods for DP %s/%s", schedulerdp.Namespace, schedulerdp.Name)
+			verifyPodsAreRestarted(initialPods, newPods)
+		})
+
 	})
 })
