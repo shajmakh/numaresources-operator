@@ -271,7 +271,7 @@ var _ = Describe("[serial][disruptive] numaresources configuration management", 
 				By("verify scheduler name is updated")
 				updatedNRS := nrosched.CheckNROSchedulerAvailable(context.TODO(), fxt.Client, nroSchedObj.Name)
 				Expect(updatedNRS).ToNot(BeNil())
-				Expect(updatedNRS.Status.SchedulerName).To(Equal(serialconfig.SchedulerTestName), "failed to update the schedulerName field,expected %q but found %q", serialconfig.SchedulerTestName, updatedSchedObj.Status.SchedulerName)
+				Expect(updatedNRS.Status.SchedulerName).To(Equal(serialconfig.SchedulerTestName), "failed to update the schedulerName field")
 
 				By("schedule pod using the new scheduler name")
 				testPod := objects.NewTestPodPause(fxt.Namespace.Name, e2efixture.RandomizeName("testpod"))
