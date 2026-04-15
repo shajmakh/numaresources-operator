@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 
 	"k8s.io/klog/v2"
 
@@ -68,13 +69,12 @@ var _ = Describe("TLS", func() {
 		Expect(pods).ToNot(BeEmpty(), "no pods found for the deployment")
 
 		schedulerPod := &pods[0]
+		Expect(schedulerPod.Status.PodIP).ToNot(BeEmpty(), "scheduler pod %q has no IP", schedulerPod.Name)
+		addr := net.JoinHostPort(schedulerPod.Status.PodIP, schedulerSecurePort)
 
-		belowMinVersionStr, err := intls.CurlTLSValue(belowMinVersion)
-		Expect(err).ToNot(HaveOccurred())
-		By(fmt.Sprintf("verifying that TLS connections at version %s are rejected by the server", belowMinVersionStr))
-		endpoint := fmt.Sprintf("https://localhost:%s/healthz", schedulerSecurePort)
-		_, err = intls.ProbeMaxTLSVersion(ctx, e2eclient.K8sClient, schedulerPod, endpoint, belowMinVersion)
-		Expect(err).To(HaveOccurred(), "scheduler server should reject TLS connections capped at %s", belowMinVersionStr)
+		By(fmt.Sprintf("verifying that TLS connections at version %s are rejected by the server", tls.VersionName(belowMinVersion)))
+		err = intls.ProbeMaxTLSVersion(addr, belowMinVersion)
+		Expect(err).To(HaveOccurred(), "scheduler server should reject TLS connections capped at %s", tls.VersionName(belowMinVersion))
 		Expect(errors.Is(err, intls.ErrTLSHandshakeRejected)).To(BeTrue(),
 			"expected TLS handshake rejection, got: %v", err)
 
@@ -89,7 +89,7 @@ var _ = Describe("TLS", func() {
 			Skip("all known TLS 1.2 ciphers are in the allowed set, nothing to test")
 		}
 		klog.InfoS("testing with disallowed cipher", "cipher", disallowedCipher)
-		err = intls.ProbeTLSCipher(ctx, e2eclient.K8sClient, schedulerPod, endpoint, disallowedCipher)
+		err = intls.ProbeTLSCipher(addr, disallowedCipher)
 		Expect(err).To(HaveOccurred(), "scheduler server should reject connections with disallowed cipher %s", disallowedCipher)
 		Expect(errors.Is(err, intls.ErrTLSHandshakeRejected)).To(BeTrue(),
 			"expected TLS handshake rejection for cipher %s, got: %v", disallowedCipher, err)
@@ -120,26 +120,25 @@ var _ = Describe("TLS", func() {
 		Expect(pods).ToNot(BeEmpty(), "no pods found for the deployment")
 
 		schedulerPod := &pods[0]
+		Expect(schedulerPod.Status.PodIP).ToNot(BeEmpty(), "scheduler pod %q has no IP", schedulerPod.Name)
+		addr := net.JoinHostPort(schedulerPod.Status.PodIP, schedulerSecurePort)
 
 		By("probing the scheduler HTTPS endpoint to verify TLS connection is accepted")
-		endpoint := fmt.Sprintf("https://localhost:%s/healthz", schedulerSecurePort)
-		gotVersion, gotCipher, err := intls.ProbeTLSSettings(ctx, e2eclient.K8sClient, schedulerPod, endpoint)
+		gotVersion, gotCipherID, err := intls.ProbeTLSSettings(addr)
 		Expect(err).ToNot(HaveOccurred(), "failed to probe TLS settings on pod %q", schedulerPod.Name)
-		klog.InfoS("negotiated TLS settings", "version", gotVersion, "cipher", gotCipher)
 
-		uint16Version, err := intls.CurlTLSVersionToUint16(gotVersion)
-		Expect(err).ToNot(HaveOccurred(), "failed to get TLS version from %q", gotVersion)
-		Expect(uint16Version).To(BeNumerically(">=", minVersion), "negotiated TLS version %q is below the expected minimum %q", gotVersion, libgocrypto.TLSVersionToNameOrDie(minVersion))
+		gotVersionName := tls.VersionName(gotVersion)
+		gotCipherName := tls.CipherSuiteName(gotCipherID)
+		klog.InfoS("negotiated TLS settings", "version", gotVersionName, "cipher", gotCipherName)
 
-		ianaCiphers := libgocrypto.OpenSSLToIANACipherSuites([]string{gotCipher})
-		klog.InfoS("ciphers mapping", "gotCipher", gotCipher, "ianaCiphers", ianaCiphers)
+		Expect(gotVersion).To(BeNumerically(">=", minVersion), "negotiated TLS version %s is below the expected minimum %s", gotVersionName, libgocrypto.TLSVersionToNameOrDie(minVersion))
+
 		// TLS 1.3 cipher suites are not configurable and won't appear in
 		// the profile's list; only validate for TLS 1.2 and below.
-		if uint16Version < tls.VersionTLS13 {
-			Expect(ianaCiphers).ToNot(BeEmpty(), "could not map negotiated cipher %v to any IANA name", gotCipher)
-			for _, cipher := range ianaCiphers {
-				Expect(tlsProfileSpec.Ciphers).To(ContainElement(cipher), "negotiated cipher %v (IANA: %v) is not in the allowed set %v", gotCipher, cipher, tlsProfileSpec.Ciphers)
-			}
+		if gotVersion < tls.VersionTLS13 {
+			Expect(gotCipherName).ToNot(BeEmpty(), "could not resolve negotiated cipher suite ID 0x%04x", gotCipherID)
+			Expect(tlsProfileSpec.Ciphers).To(ContainElement(gotCipherName),
+				"negotiated cipher %s is not in the allowed set %v", gotCipherName, tlsProfileSpec.Ciphers)
 		}
 	})
 })

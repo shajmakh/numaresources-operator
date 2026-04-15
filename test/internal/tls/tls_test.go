@@ -18,10 +18,56 @@ package tls
 
 import (
 	"crypto/tls"
+	"errors"
+	"fmt"
 	"testing"
 
 	configv1 "github.com/openshift/api/config/v1"
+	libgocrypto "github.com/openshift/library-go/pkg/crypto"
 )
+
+func TestWrapTLSHandshakeError(t *testing.T) {
+	t.Run("nil error returns nil", func(t *testing.T) {
+		if got := wrapTLSHandshakeError(nil); got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+	})
+
+	t.Run("tls.AlertError is wrapped", func(t *testing.T) {
+		alertErr := tls.AlertError(40) // handshake_failure alert
+		got := wrapTLSHandshakeError(alertErr)
+		if !errors.Is(got, ErrTLSHandshakeRejected) {
+			t.Errorf("expected ErrTLSHandshakeRejected, got %v", got)
+		}
+	})
+
+	t.Run("handshake failure string is wrapped", func(t *testing.T) {
+		err := fmt.Errorf("remote error: tls: handshake failure")
+		got := wrapTLSHandshakeError(err)
+		if !errors.Is(got, ErrTLSHandshakeRejected) {
+			t.Errorf("expected ErrTLSHandshakeRejected, got %v", got)
+		}
+	})
+
+	t.Run("protocol version string is wrapped", func(t *testing.T) {
+		err := fmt.Errorf("tls: no supported protocol version")
+		got := wrapTLSHandshakeError(err)
+		if !errors.Is(got, ErrTLSHandshakeRejected) {
+			t.Errorf("expected ErrTLSHandshakeRejected, got %v", got)
+		}
+	})
+
+	t.Run("unrelated error is returned as-is", func(t *testing.T) {
+		err := fmt.Errorf("connection refused")
+		got := wrapTLSHandshakeError(err)
+		if errors.Is(got, ErrTLSHandshakeRejected) {
+			t.Errorf("should not wrap unrelated error, got %v", got)
+		}
+		if got.Error() != err.Error() {
+			t.Errorf("expected original error %q, got %q", err, got)
+		}
+	})
+}
 
 func TestFindDisallowedCipher(t *testing.T) {
 	oldProfile := configv1.TLSProfiles[configv1.TLSProfileOldType]
@@ -67,71 +113,37 @@ func TestFindDisallowedCipher(t *testing.T) {
 	})
 }
 
-func TestCurlTLSVersionToUint16(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected uint16
-		wantErr  bool
-	}{
-		{input: "TLSv1", expected: tls.VersionTLS10},
-		{input: "TLSv1.0", expected: tls.VersionTLS10},
-		{input: "TLSv1.1", expected: tls.VersionTLS11},
-		{input: "TLSv1.2", expected: tls.VersionTLS12},
-		{input: "TLSv1.3", expected: tls.VersionTLS13},
-		{input: "SSLv3", wantErr: true},
-		{input: "", wantErr: true},
-		{input: "garbage", wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got, err := CurlTLSVersionToUint16(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected error for %q, got %d", tt.input, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error for %q: %v", tt.input, err)
-			}
-			if got != tt.expected {
-				t.Errorf("CurlTLSVersionToUint16(%q) = %d, want %d", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
+func TestOpenSSLCipherToGoID(t *testing.T) {
+	t.Run("known TLS 1.2 cipher", func(t *testing.T) {
+		id, err := OpenSSLCipherToGoID("ECDHE-RSA-AES128-GCM-SHA256")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if id != tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
+			t.Errorf("got 0x%04x, want 0x%04x", id, tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256)
+		}
+	})
 
-func TestCurlTLSValue(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    uint16
-		expected string
-		wantErr  bool
-	}{
-		{name: "TLS 1.0", input: tls.VersionTLS10, expected: "1.0"},
-		{name: "TLS 1.1", input: tls.VersionTLS11, expected: "1.1"},
-		{name: "TLS 1.2", input: tls.VersionTLS12, expected: "1.2"},
-		{name: "TLS 1.3", input: tls.VersionTLS13, expected: "1.3"},
-		{name: "zero", input: 0, wantErr: true},
-		{name: "unknown", input: 9999, wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := CurlTLSValue(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("expected error for %d, got %q", tt.input, got)
-				}
-				return
+	t.Run("all ciphers from intermediate profile resolve", func(t *testing.T) {
+		profile := configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
+		for _, c := range profile.Ciphers {
+			ianaNames := libgocrypto.OpenSSLToIANACipherSuites([]string{c})
+			if len(ianaNames) == 0 {
+				continue
 			}
+			_, err := OpenSSLCipherToGoID(c)
 			if err != nil {
-				t.Fatalf("unexpected error for %d: %v", tt.input, err)
+				t.Errorf("failed to resolve cipher %q: %v", c, err)
 			}
-			if got != tt.expected {
-				t.Errorf("CurlTLSValue(%d) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
+		}
+	})
+
+	t.Run("unknown cipher returns error", func(t *testing.T) {
+		_, err := OpenSSLCipherToGoID("BOGUS-CIPHER")
+		if err == nil {
+			t.Error("expected error for unknown cipher")
+		}
+	})
 }
 
 func TestTLSVersionBelow(t *testing.T) {
@@ -161,68 +173,6 @@ func TestTLSVersionBelow(t *testing.T) {
 			}
 			if got != tt.expected {
 				t.Errorf("TLSVersionBelow(%d) = %d, want %d", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestSSLConnectionRegex(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       string
-		wantVersion string
-		wantCipher  string
-		shouldMatch bool
-	}{
-		{
-			name:        "TLS 1.3 with OpenSSL",
-			input:       "* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384",
-			wantVersion: "TLSv1.3",
-			wantCipher:  "TLS_AES_256_GCM_SHA384",
-			shouldMatch: true,
-		},
-		{
-			name:        "TLS 1.2 with OpenSSL",
-			input:       "* SSL connection using TLSv1.2 / ECDHE-RSA-AES128-GCM-SHA256",
-			wantVersion: "TLSv1.2",
-			wantCipher:  "ECDHE-RSA-AES128-GCM-SHA256",
-			shouldMatch: true,
-		},
-		{
-			name:        "embedded in multi-line verbose output",
-			input:       "* Connected to localhost\n* ALPN: offers h2\n* SSL connection using TLSv1.3 / TLS_AES_128_GCM_SHA256\n* Server certificate:\n",
-			wantVersion: "TLSv1.3",
-			wantCipher:  "TLS_AES_128_GCM_SHA256",
-			shouldMatch: true,
-		},
-		{
-			name:        "no match in output",
-			input:       "* Connected to localhost\n* some other output\n",
-			shouldMatch: false,
-		},
-		{
-			name:        "empty output",
-			input:       "",
-			shouldMatch: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			matches := sslConnectionRe.FindStringSubmatch(tt.input)
-			if !tt.shouldMatch {
-				if len(matches) >= 3 {
-					t.Errorf("expected no match, got version=%q cipher=%q", matches[1], matches[2])
-				}
-				return
-			}
-			if len(matches) < 3 {
-				t.Fatalf("expected match, got none for input: %s", tt.input)
-			}
-			if matches[1] != tt.wantVersion {
-				t.Errorf("version = %q, want %q", matches[1], tt.wantVersion)
-			}
-			if matches[2] != tt.wantCipher {
-				t.Errorf("cipher = %q, want %q", matches[2], tt.wantCipher)
 			}
 		})
 	}
