@@ -49,6 +49,10 @@ spec:
             - /bin/kube-scheduler
           args:
             - --config=/etc/kubernetes/config.yaml
+          ports:
+            - containerPort: 10259
+              name: sched
+              protocol: TCP
           volumeMounts:
             - mountPath: "/etc/kubernetes"
               name: "etckubernetes"
