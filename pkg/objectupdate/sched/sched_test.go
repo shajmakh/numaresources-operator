@@ -30,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
 	k8swgmanifests "github.com/k8stopologyawareschedwg/deployer/pkg/manifests"
@@ -638,7 +639,7 @@ func TestDeploymentTLSSettingsRepeated(t *testing.T) {
 func TestDeploymentAffinitySettings(t *testing.T) {
 	t.Run("no labels", func(t *testing.T) {
 		dp := dpMinimal.DeepCopy()
-		err := DeploymentAffinitySettings(dp, nropv1.NUMAResourcesSchedulerSpec{})
+		err := DeploymentAffinitySettings(dp, nil, nropv1.NUMAResourcesSchedulerSpec{})
 		if err == nil {
 			t.Fatalf("expected error but received nil")
 		}
@@ -652,7 +653,7 @@ func TestDeploymentAffinitySettings(t *testing.T) {
 		dp := dpMinimal.DeepCopy()
 		dp.Spec.Template.ObjectMeta.Labels = map[string]string{"app": "scheduler"}
 		for _, count := range rcs {
-			err := DeploymentAffinitySettings(dp, nropv1.NUMAResourcesSchedulerSpec{Replicas: count})
+			err := DeploymentAffinitySettings(dp, nil, nropv1.NUMAResourcesSchedulerSpec{Replicas: count})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -671,10 +672,14 @@ func TestDeploymentAffinitySettings(t *testing.T) {
 			if diff := cmp.Diff(expectedPodAntiAffinity, dp.Spec.Template.Spec.Affinity.PodAntiAffinity); diff != "" {
 				t.Errorf("affinity mismatch (-expected +got):\n%s", diff)
 			}
+			if diff := cmp.Diff(intaff.GetDeploymentStrategyForPodAntiAffinity(dpMinimal.Spec.Strategy), dp.Spec.Strategy); diff != "" {
+				t.Errorf("strategy mismatch when pod anti-affinity is set (-expected +got):\n%s", diff)
+			}
 		}
 	})
 
 	t.Run("reset podAntiAffinity with non-zero replicas", func(t *testing.T) {
+		baseline := dpMinimal.DeepCopy()
 		dp := dpMinimal.DeepCopy()
 		dp.Spec.Template.ObjectMeta.Labels = map[string]string{"app": "scheduler"}
 		initialNodeAffinity := &corev1.NodeAffinity{
@@ -704,7 +709,7 @@ func TestDeploymentAffinitySettings(t *testing.T) {
 				},
 			},
 		}
-		err := DeploymentAffinitySettings(dp, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(1))})
+		err := DeploymentAffinitySettings(dp, baseline, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(1))})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -714,14 +719,16 @@ func TestDeploymentAffinitySettings(t *testing.T) {
 		if dp.Spec.Template.Spec.Affinity.PodAntiAffinity != nil {
 			t.Fatalf("expected podAntiAffinity to be reset but got %v", dp.Spec.Template.Spec.Affinity.PodAntiAffinity)
 		}
+		if diff := cmp.Diff(baseline.Spec.Strategy, dp.Spec.Strategy); diff != "" {
+			t.Errorf("strategy should match baseline after explicit replicas (-expected +got):\n%s", diff)
+		}
 	})
-}
 
-func TestDeploymentAffinitySettingsOverride(t *testing.T) {
 	t.Run("override PodAntiAffinity on autodetection of replicas", func(t *testing.T) {
+		baseline := dpMinimal.DeepCopy()
 		dp := dpMinimal.DeepCopy()
 		dp.Spec.Template.ObjectMeta.Labels = map[string]string{"app": "scheduler"}
-		err := DeploymentAffinitySettings(dp, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(0))})
+		err := DeploymentAffinitySettings(dp, baseline, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(0))})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -730,13 +737,129 @@ func TestDeploymentAffinitySettingsOverride(t *testing.T) {
 			t.Fatal("expected podAntiAffinity but got nil")
 		}
 
-		err = DeploymentAffinitySettings(dp, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(2))})
+		err = DeploymentAffinitySettings(dp, baseline, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(2))})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
 		if dp.Spec.Template.Spec.Affinity != nil && dp.Spec.Template.Spec.Affinity.PodAntiAffinity != nil {
 			t.Fatalf("Override failed: expected no podAntiAffinity but got %v", dp.Spec.Template.Spec.Affinity.PodAntiAffinity)
+		}
+		if diff := cmp.Diff(baseline.Spec.Strategy, dp.Spec.Strategy); diff != "" {
+			t.Errorf("strategy should match baseline after override to explicit replicas (-expected +got):\n%s", diff)
+		}
+	})
+	t.Run("explicit replicas with nil affinity leaves deployment unchanged", func(t *testing.T) {
+		baseline := dpMinimal.DeepCopy()
+		dp := dpMinimal.DeepCopy()
+		dp.Spec.Template.Labels = map[string]string{"app": "scheduler"}
+		want := dp.DeepCopy()
+		if err := DeploymentAffinitySettings(dp, baseline, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(1))}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if diff := cmp.Diff(want.Spec, dp.Spec); diff != "" {
+			t.Errorf("expected no spec mutation when affinity is nil (-want +got):\n%s", diff)
+		}
+	})
+	t.Run("explicit replicas with affinity but nil PodAntiAffinity leaves deployment unchanged", func(t *testing.T) {
+		baseline := dpMinimal.DeepCopy()
+		initialNA := &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{
+					{
+						MatchExpressions: []corev1.NodeSelectorRequirement{
+							{Key: "node-role.kubernetes.io/control-plane", Operator: corev1.NodeSelectorOpExists},
+						},
+					},
+				},
+			},
+		}
+		dp := dpMinimal.DeepCopy()
+		dp.Spec.Template.Labels = map[string]string{"app": "scheduler"}
+		dp.Spec.Template.Spec.Affinity = &corev1.Affinity{NodeAffinity: initialNA}
+		want := dp.DeepCopy()
+		if err := DeploymentAffinitySettings(dp, baseline, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(3))}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if diff := cmp.Diff(want.Spec, dp.Spec); diff != "" {
+			t.Errorf("expected no spec mutation when PodAntiAffinity is nil (-want +got):\n%s", diff)
+		}
+	})
+	t.Run("use baseline for revert", func(t *testing.T) {
+		baseline := dpMinimal.DeepCopy()
+		baseline.Spec.Template.Labels = map[string]string{"app": "scheduler"}
+		baseline.Spec.Strategy = appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxUnavailable: ptr.To(intstr.FromInt(7)),
+				MaxSurge:       ptr.To(intstr.FromInt(5)),
+			},
+		}
+		baselinePA := &corev1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						TopologyKey: "topology.kubernetes.io/zone",
+					},
+				},
+			},
+		}
+		baseline.Spec.Template.Spec.Affinity = &corev1.Affinity{PodAntiAffinity: baselinePA}
+
+		dp := dpMinimal.DeepCopy()
+		dp.Spec.Template.Labels = map[string]string{"app": "scheduler"}
+		if err := DeploymentAffinitySettings(dp, baseline, nropv1.NUMAResourcesSchedulerSpec{}); err != nil {
+			t.Fatalf("autodetect: %v", err)
+		}
+		afterAutoPA := dp.Spec.Template.Spec.Affinity.PodAntiAffinity.DeepCopy()
+		if cmp.Equal(afterAutoPA, baselinePA) {
+			t.Fatal("expected operator-required pod anti-affinity to differ from baseline preferred anti-affinity")
+		}
+		if diff := cmp.Diff(intaff.GetDeploymentStrategyForPodAntiAffinity(dpMinimal.Spec.Strategy), dp.Spec.Strategy); diff != "" {
+			t.Fatalf("after autodetect strategy mismatch (-want +got):\n%s", diff)
+		}
+
+		if err := DeploymentAffinitySettings(dp, baseline, nropv1.NUMAResourcesSchedulerSpec{Replicas: ptr.To(int32(1))}); err != nil {
+			t.Fatalf("revert to baseline: %v", err)
+		}
+		if diff := cmp.Diff(baseline.Spec.Strategy, dp.Spec.Strategy); diff != "" {
+			t.Errorf("strategy after revert (-want +got):\n%s", diff)
+		}
+		if diff := cmp.Diff(baselinePA, dp.Spec.Template.Spec.Affinity.PodAntiAffinity); diff != "" {
+			t.Errorf("podAntiAffinity after revert (-want +got):\n%s", diff)
+		}
+	})
+	t.Run("should preserve existing NodeAffinity on autodetection of replicas", func(t *testing.T) {
+		initialNA := &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{
+					{
+						MatchExpressions: []corev1.NodeSelectorRequirement{
+							{Key: "node-role.kubernetes.io/control-plane", Operator: corev1.NodeSelectorOpExists},
+						},
+					},
+				},
+			},
+		}
+		dp := dpMinimal.DeepCopy()
+		dp.Spec.Template.Labels = map[string]string{"app": "scheduler"}
+		dp.Spec.Template.Spec.Affinity = &corev1.Affinity{NodeAffinity: initialNA}
+		if err := DeploymentAffinitySettings(dp, nil, nropv1.NUMAResourcesSchedulerSpec{}); err != nil {
+			t.Fatalf("autodetect: %v", err)
+		}
+		if diff := cmp.Diff(initialNA, dp.Spec.Template.Spec.Affinity.NodeAffinity); diff != "" {
+			t.Errorf("NodeAffinity should be preserved (-want +got):\n%s", diff)
+		}
+		wantPA, err := intaff.GetPodAntiAffinity(dp.Spec.Template.Labels)
+		if err != nil {
+			t.Fatalf("GetPodAntiAffinity: %v", err)
+		}
+		if diff := cmp.Diff(wantPA, dp.Spec.Template.Spec.Affinity.PodAntiAffinity); diff != "" {
+			t.Errorf("PodAntiAffinity after autodetect (-want +got):\n%s", diff)
+		}
+		if diff := cmp.Diff(intaff.GetDeploymentStrategyForPodAntiAffinity(dpMinimal.Spec.Strategy), dp.Spec.Strategy); diff != "" {
+			t.Errorf("strategy after autodetect (-want +got):\n%s", diff)
 		}
 	})
 }

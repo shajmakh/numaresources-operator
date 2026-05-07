@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
@@ -1032,7 +1033,7 @@ var _ = Describe("Test NUMAResourcesScheduler Reconcile", func() {
 		})
 	})
 
-	Context("when setting the scheduler pod anti affinity", func() {
+	Context("when setting the scheduler PodAntiAffinity", func() {
 		type testCase struct {
 			replicasCount         *int32
 			expectPodAntiAffinity bool
@@ -1050,7 +1051,15 @@ var _ = Describe("Test NUMAResourcesScheduler Reconcile", func() {
 				},
 			},
 		}
-		DescribeTable("should set PodAntiAffinity for scheduler Deployment according to replicas count", func(ctx context.Context, tc testCase) {
+		expectedSafeStrategy := appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxUnavailable: ptr.To(intstr.FromInt(1)),
+				MaxSurge:       ptr.To(intstr.FromInt(0)),
+			},
+		}
+
+		DescribeTable("should set PodAntiAffinity and Rollout Strategy for scheduler Deployment according to replicas count", func(ctx context.Context, tc testCase) {
 			nrs := testobjs.NewNUMAResourcesScheduler("numaresourcesscheduler", "some/url:latest", testSchedulerName, 11*time.Second)
 			nrs.Spec.Replicas = tc.replicasCount
 			initObjects := []runtime.Object{nrs}
@@ -1059,6 +1068,7 @@ var _ = Describe("Test NUMAResourcesScheduler Reconcile", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Baseline node affinity comes from the scheduler deployment manifest; reconcile must preserve it.
 			expectedNodeAff := reconciler.SchedulerManifests.Deployment.Spec.Template.Spec.Affinity.NodeAffinity.DeepCopy()
+			initialStrategy := *reconciler.SchedulerManifests.Deployment.Spec.Strategy.DeepCopy()
 
 			key := client.ObjectKeyFromObject(nrs)
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
@@ -1072,12 +1082,14 @@ var _ = Describe("Test NUMAResourcesScheduler Reconcile", func() {
 
 			if !tc.expectPodAntiAffinity {
 				Expect(affinity.PodAntiAffinity).To(BeNil())
+				Expect(dp.Spec.Strategy).To(Equal(initialStrategy))
 				return
 			}
 
 			podAntiAffinity := affinity.PodAntiAffinity
 			Expect(podAntiAffinity).ToNot(BeNil())
 			Expect(podAntiAffinity).To(Equal(expectedPodAntiAff))
+			Expect(dp.Spec.Strategy).To(Equal(expectedSafeStrategy))
 		},
 			Entry("when replicas are not set, expected podAntiAffinity", testCase{expectPodAntiAffinity: true}),
 			Entry("when replicas are set and zero, expected podAntiAffinity", testCase{replicasCount: ptr.To(int32(0)), expectPodAntiAffinity: true}),

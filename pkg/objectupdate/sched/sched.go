@@ -107,12 +107,28 @@ func DeploymentTLSSettings(dp *appsv1.Deployment, tlsSettings objtls.Settings) e
 // deployment only when the CR leaves replica count to autodetection (Replicas unset or 0).
 // An explicit non-zero Replicas value means the user chose a replica count and keeps
 // full control (no required pod anti-affinity).
-func DeploymentAffinitySettings(dp *appsv1.Deployment, spec nropv1.NUMAResourcesSchedulerSpec) error {
+func DeploymentAffinitySettings(dp *appsv1.Deployment, baseline *appsv1.Deployment, spec nropv1.NUMAResourcesSchedulerSpec) error {
 	affinityCopy := dp.Spec.Template.Spec.Affinity.DeepCopy()
 	if spec.Replicas != nil && *spec.Replicas != 0 {
-		if affinityCopy != nil && affinityCopy.PodAntiAffinity != nil {
-			dp.Spec.Template.Spec.Affinity.PodAntiAffinity = nil
+		// we want to revert back any podAntiAffinity and strategy settings to the baseline values
+		if affinityCopy == nil {
+			return nil
 		}
+		if affinityCopy.PodAntiAffinity == nil {
+			return nil
+		}
+
+		dp.Spec.Strategy = baseline.Spec.Strategy
+		klog.V(3).InfoS("Scheduler Deployment Strategy", "strategy", dp.Spec.Strategy.String())
+
+		bl := baseline.Spec.Template.Spec.Affinity.DeepCopy()
+		if bl == nil {
+			dp.Spec.Template.Spec.Affinity.PodAntiAffinity = nil
+			klog.V(3).InfoS("Scheduler Deployment Affinity", "podAntiAffinity", nil)
+			return nil
+		}
+		dp.Spec.Template.Spec.Affinity.PodAntiAffinity = bl.PodAntiAffinity
+		klog.V(3).InfoS("Scheduler Deployment Affinity", "podAntiAffinity", dp.Spec.Template.Spec.Affinity.PodAntiAffinity.String())
 		return nil
 	}
 
@@ -131,7 +147,8 @@ func DeploymentAffinitySettings(dp *appsv1.Deployment, spec nropv1.NUMAResources
 	}
 
 	dp.Spec.Template.Spec.Affinity.PodAntiAffinity = podAntiAffinity
-	klog.V(3).InfoS("Scheduler affinity", "podAntiAffinity", dp.Spec.Template.Spec.Affinity.PodAntiAffinity)
+	dp.Spec.Strategy = intaff.GetDeploymentStrategyForPodAntiAffinity(dp.Spec.Strategy)
+	klog.V(3).InfoS("Scheduler Deployment affinity", "podAntiAffinity", dp.Spec.Template.Spec.Affinity.PodAntiAffinity)
 	return nil
 }
 

@@ -22,8 +22,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 )
 
 func TestGetPodAntiAffinity(t *testing.T) {
@@ -87,6 +90,193 @@ func TestGetPodAntiAffinity(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Fatalf("GetPodAntiAffinity mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestMaxSurgeAllowsExtraPods(t *testing.T) {
+	if !maxSurgeAllowsExtraPods(nil) {
+		t.Fatal("nil maxSurge should allow extra pods (API default surge)")
+	}
+	if !maxSurgeAllowsExtraPods(ptr.To(intstr.FromInt(1))) {
+		t.Fatal("non-zero int surge should allow extra pods")
+	}
+	if maxSurgeAllowsExtraPods(ptr.To(intstr.FromInt(0))) {
+		t.Fatal("zero int surge should not allow extra pods")
+	}
+	if !maxSurgeAllowsExtraPods(ptr.To(intstr.FromString("25%"))) {
+		t.Fatal("25% surge should allow extra pods (not treated as zero surge)")
+	}
+	if !maxSurgeAllowsExtraPods(ptr.To(intstr.FromString(""))) {
+		t.Fatal("empty string surge should be treated like unset (API default surge)")
+	}
+	if maxSurgeAllowsExtraPods(ptr.To(intstr.FromString("0%"))) {
+		t.Fatal("0% surge should not allow extra pods")
+	}
+}
+
+func TestMaxUnavailableIsExplicitZero(t *testing.T) {
+	if maxUnavailableIsExplicitZero(nil) {
+		t.Fatal("nil maxUnavailable is not explicit zero")
+	}
+	if !maxUnavailableIsExplicitZero(ptr.To(intstr.FromInt(0))) {
+		t.Fatal("int 0 should be explicit zero")
+	}
+	if maxUnavailableIsExplicitZero(ptr.To(intstr.FromInt(1))) {
+		t.Fatal("int 1 should not be explicit zero")
+	}
+	if !maxUnavailableIsExplicitZero(ptr.To(intstr.FromString("0"))) {
+		t.Fatal("string 0 should be explicit zero")
+	}
+	if !maxUnavailableIsExplicitZero(ptr.To(intstr.FromString("0%"))) {
+		t.Fatal("string 0% should be explicit zero")
+	}
+	if !maxUnavailableIsExplicitZero(ptr.To(intstr.FromString("  0  "))) {
+		t.Fatal("whitespace-padded string zero should trim to explicit zero")
+	}
+}
+
+func TestMaxSurgeAllowsExtraPodsUnknownType(t *testing.T) {
+	ios := intstr.IntOrString{Type: intstr.Type(2), IntVal: 0}
+	if !maxSurgeAllowsExtraPods(&ios) {
+		t.Fatal("unknown intstr type should be conservative (treat as surge allowed)")
+	}
+}
+
+func TestMaxUnavailableIsExplicitZeroUnknownType(t *testing.T) {
+	ios := intstr.IntOrString{Type: intstr.Type(2), IntVal: 0}
+	if maxUnavailableIsExplicitZero(&ios) {
+		t.Fatal("unknown intstr type should not be explicit zero")
+	}
+}
+
+func TestGetDeploymentStrategyForPodAntiAffinity(t *testing.T) {
+	safe := deploymentStrategySafeForPodAntiAffinity()
+
+	tests := []struct {
+		name string
+		in   appsv1.DeploymentStrategy
+		want appsv1.DeploymentStrategy
+	}{
+		{
+			name: "empty strategy type defaults to safe rolling",
+			in:   appsv1.DeploymentStrategy{},
+			want: safe,
+		},
+		{
+			name: "recreate unchanged",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			want: appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType},
+		},
+		{
+			name: "rolling nil rollingUpdate returns safe",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+			},
+			want: safe,
+		},
+		{
+			name: "rolling with no maxSurge returns safe",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: ptr.To(intstr.FromInt(2)),
+				},
+			},
+			want: safe,
+		},
+		{
+			name: "rolling non-zero maxSurge returns safe",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromInt(2)),
+					MaxUnavailable: ptr.To(intstr.FromInt(3)),
+				},
+			},
+			want: safe,
+		},
+		{
+			name: "rolling percentage surge returns safe",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromString("25%")),
+					MaxUnavailable: ptr.To(intstr.FromString("25%")),
+				},
+			},
+			want: safe,
+		},
+		{
+			name: "rolling maxUnavailable string zero returns safe",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromInt(1)),
+					MaxUnavailable: ptr.To(intstr.FromString("0%")),
+				},
+			},
+			want: safe,
+		},
+		{
+			name: "rolling maxSurge zero int preserves strategy",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromInt(0)),
+					MaxUnavailable: ptr.To(intstr.FromInt(5)),
+				},
+			},
+			want: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromInt(0)),
+					MaxUnavailable: ptr.To(intstr.FromInt(5)),
+				},
+			},
+		},
+		{
+			name: "rolling maxSurge zero percent preserves strategy",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromString("0%")),
+					MaxUnavailable: ptr.To(intstr.FromInt(1)),
+				},
+			},
+			want: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromString("0%")),
+					MaxUnavailable: ptr.To(intstr.FromInt(1)),
+				},
+			},
+		},
+		{
+			name: "rolling maxSurge zero nil maxUnavailable preserves strategy",
+			in: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge: ptr.To(intstr.FromInt(0)),
+				},
+			},
+			want: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge: ptr.To(intstr.FromInt(0)),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetDeploymentStrategyForPodAntiAffinity(tt.in)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Fatalf("GetDeploymentStrategyForPodAntiAffinity mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
