@@ -70,11 +70,12 @@ const (
 // NUMAResourcesSchedulerReconciler reconciles a NUMAResourcesScheduler object
 type NUMAResourcesSchedulerReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
-	SchedulerManifests schedmanifests.Manifests
-	Namespace          string
-	PlatformInfo       platforminfo.PlatformInfo
-	TLSSettings        objtls.Settings
+	Scheme                     *runtime.Scheme
+	SchedulerManifests         schedmanifests.Manifests
+	SchedulerManifestsBaseline schedmanifests.Manifests
+	Namespace                  string
+	PlatformInfo               platforminfo.PlatformInfo
+	TLSSettings                objtls.Settings
 }
 
 // Namespace Scoped

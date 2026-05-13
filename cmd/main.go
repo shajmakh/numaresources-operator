@@ -426,15 +426,17 @@ func main() {
 			klog.ErrorS(err, "unable to load the Scheduler manifests")
 			exitWithCancel(cancel, 1)
 		}
+		schedMfBaseline := schedMf.Clone()
 		klog.InfoS("manifests loaded", "component", "Scheduler")
 
 		if err = (&controller.NUMAResourcesSchedulerReconciler{
-			Client:             mgr.GetClient(),
-			Scheme:             mgr.GetScheme(),
-			SchedulerManifests: schedMf,
-			Namespace:          namespace,
-			PlatformInfo:       platforminfo.New(discoveredCluster.Platform, discoveredCluster.LongVersion),
-			TLSSettings:        tlsSettings,
+			Client:                     mgr.GetClient(),
+			Scheme:                     mgr.GetScheme(),
+			SchedulerManifests:         schedMf,
+			SchedulerManifestsBaseline: schedMfBaseline,
+			Namespace:                  namespace,
+			PlatformInfo:               platforminfo.New(discoveredCluster.Platform, discoveredCluster.LongVersion),
+			TLSSettings:                tlsSettings,
 		}).SetupWithManager(mgr); err != nil {
 			klog.ErrorS(err, "unable to create controller", "controller", "NUMAResourcesScheduler")
 			exitWithCancel(cancel, 1)
