@@ -1,9 +1,9 @@
 name: Watch and Update embedded Scheduler Images Digests JSON File
 
 on:
-  # Option A: Run periodically to "watch" for external updates
-  schedule:
-    - cron: '0 */4 * * *' 
+  # # Option A: Run periodically to "watch" for external updates
+  # schedule:
+  #   - cron: '0 */4 * * *' 
   
   # Option B:Useful for manually triggering the workflow 
   workflow_dispatch:
