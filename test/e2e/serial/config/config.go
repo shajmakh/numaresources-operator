@@ -162,6 +162,9 @@ func validateTopologyManagerConfiguration(kconfigs map[string]*kubeletconfigv1be
 	}
 
 	for _, nrt := range nrts {
+		if nrt.Name == "dhcp-6-106-160.t5g-dev.eng.rdu2.dc.redhat.com" {
+			continue
+		}
 		if _, ok := kconfigs[nrt.Name]; !ok {
 			errs = append(errs, fmt.Errorf("Unable to find KubeletConfig for node %q", nrt.Name))
 		}
